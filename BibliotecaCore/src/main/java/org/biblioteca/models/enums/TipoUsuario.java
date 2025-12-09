@@ -15,8 +15,26 @@ public enum TipoUsuario {
         return nombre;
     }
 
+    public static TipoUsuario fromString(String text) {
+        if (text == null) return LECTOR;
+
+        for (TipoUsuario tipo : TipoUsuario.values()) {
+            if (tipo.name().equalsIgnoreCase(text) ||
+                    tipo.nombre.equalsIgnoreCase(text)) {
+                return tipo;
+            }
+        }
+        return LECTOR;
+    }
+
     @Override
     public String toString() {
         return nombre;
     }
 }
+
+
+
+
+
+

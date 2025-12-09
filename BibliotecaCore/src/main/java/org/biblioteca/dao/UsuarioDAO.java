@@ -1,6 +1,5 @@
 package org.biblioteca.dao;
 
-
 import org.biblioteca.models.Usuario;
 import org.biblioteca.models.enums.EstadoUsuario;
 import org.biblioteca.models.enums.TipoUsuario;
@@ -52,8 +51,19 @@ public class UsuarioDAO extends GenericDAO<Usuario, Integer> {
         usuario.setDireccion(rs.getString("direccion"));
 
         // Convertir Enums
-        usuario.setTipoUsuario(TipoUsuario.valueOf(rs.getString("tipo_usuario").toUpperCase()));
-        usuario.setEstado(EstadoUsuario.valueOf(rs.getString("estado").toUpperCase()));
+        String tipoStr = rs.getString("tipo_usuario");
+        if (tipoStr != null && !tipoStr.trim().isEmpty()) {
+            usuario.setTipoUsuario(TipoUsuario.fromString(tipoStr));
+        } else {
+            usuario.setTipoUsuario(TipoUsuario.LECTOR); // Valor por defecto
+        }
+
+        String estadoStr = rs.getString("estado");
+        if (estadoStr != null && !estadoStr.trim().isEmpty()) {
+            usuario.setEstado(EstadoUsuario.fromString(estadoStr));
+        } else {
+            usuario.setEstado(EstadoUsuario.ACTIVO); // Valor por defecto
+        }
 
         usuario.setPasswordHash(rs.getString("password_hash"));
         usuario.setFechaRegistro(rs.getDate("fecha_registro").toLocalDate());
@@ -101,6 +111,9 @@ public class UsuarioDAO extends GenericDAO<Usuario, Integer> {
         } else {
             stmt.setNull(index++, Types.TIMESTAMP);
         }
+
+        // FALTA EL ID EN TU VERSIÓN - ¡ESTO ES IMPORTANTE!
+        stmt.setInt(index++, usuario.getIdUsuario());
     }
 
     @Override
@@ -270,6 +283,134 @@ public class UsuarioDAO extends GenericDAO<Usuario, Integer> {
 
         } catch (SQLException e) {
             handleSQLException("Error al verificar DNI", e);
+            return false;
+        }
+    }
+
+    // ========== MÉTODOS NUEVOS PARA COMPATIBILIDAD ==========
+
+    /**
+     * Método para compatibilidad con AuthController
+     */
+    public Optional<Usuario> authenticate(String email, String passwordHash) {
+        return autenticar(email, passwordHash);
+    }
+
+    /**
+     * Método para compatibilidad con AuthController
+     */
+    public boolean usernameExists(String email) {
+        return existeEmail(email);
+    }
+
+    /**
+     * Método para compatibilidad con AuthController
+     */
+    public boolean emailExists(String email) {
+        return existeEmail(email);
+    }
+
+    /**
+     * Método para compatibilidad con AuthController
+     */
+    public boolean dniExists(String dni) {
+        return existeDni(dni);
+    }
+
+    /**
+     * Obtiene todos los usuarios activos
+     */
+    public List<Usuario> findActivos() {
+        return findByEstado(EstadoUsuario.ACTIVO);
+    }
+
+    /**
+     * Obtiene estadísticas de usuarios
+     */
+    public int countByTipo(TipoUsuario tipo) {
+        String sql = "SELECT COUNT(*) FROM usuario WHERE tipo_usuario = ?";
+
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, tipo.name());
+            ResultSet rs = stmt.executeQuery();
+
+            if (rs.next()) {
+                return rs.getInt(1);
+            }
+            return 0;
+
+        } catch (SQLException e) {
+            handleSQLException("Error al contar por tipo", e);
+            return 0;
+        }
+    }
+
+    /**
+     * Busca usuarios por nombre o email (para búsquedas)
+     */
+    public List<Usuario> buscar(String criterio) {
+        List<Usuario> usuarios = new ArrayList<>();
+        String sql = "SELECT * FROM usuario WHERE nombre LIKE ? OR email LIKE ? OR dni LIKE ? ORDER BY nombre";
+
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            String likeCriterio = "%" + criterio + "%";
+            stmt.setString(1, likeCriterio);
+            stmt.setString(2, likeCriterio);
+            stmt.setString(3, likeCriterio);
+
+            ResultSet rs = stmt.executeQuery();
+
+            while (rs.next()) {
+                usuarios.add(mapResultSetToEntity(rs));
+            }
+
+        } catch (SQLException e) {
+            handleSQLException("Error en búsqueda de usuarios", e);
+        }
+        return usuarios;
+    }
+
+    /**
+     * Actualiza el límite de préstamos de un usuario
+     */
+    public boolean actualizarLimitePrestamos(int idUsuario, int nuevoLimite) {
+        String sql = "UPDATE usuario SET limite_prestamos = ? WHERE id_usuario = ?";
+
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setInt(1, nuevoLimite);
+            stmt.setInt(2, idUsuario);
+
+            return stmt.executeUpdate() > 0;
+
+        } catch (SQLException e) {
+            handleSQLException("Error al actualizar límite de préstamos", e);
+            return false;
+        }
+    }
+
+    /**
+     * Verifica si un usuario puede tomar más préstamos
+     */
+    public boolean puedeTomarPrestamo(int idUsuario) {
+        String sql = "SELECT COUNT(*) as prestamos_activos, limite_prestamos " +
+                "FROM usuario u " +
+                "LEFT JOIN prestamo p ON u.id_usuario = p.id_usuario AND p.estado = 'ACTIVO' " +
+                "WHERE u.id_usuario = ? " +
+                "GROUP BY u.id_usuario";
+
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setInt(1, idUsuario);
+            ResultSet rs = stmt.executeQuery();
+
+            if (rs.next()) {
+                int prestamosActivos = rs.getInt("prestamos_activos");
+                int limitePrestamos = rs.getInt("limite_prestamos");
+                return prestamosActivos < limitePrestamos;
+            }
+            return false;
+
+        } catch (SQLException e) {
+            handleSQLException("Error al verificar disponibilidad de préstamos", e);
             return false;
         }
     }
