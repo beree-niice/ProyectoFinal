@@ -1,17 +1,23 @@
 package org.biblioteca.models;
 
 import org.biblioteca.models.enums.EstadoFisico;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class Libro {
     private int idLibro;
     private String isbn;
     private String titulo;
+
+    // RELACIONES (Importante para la Vista)
     private Editorial editorial;
-    private int añoPublicacion;
     private Categoria categoria;
+    private List<Autor> autores;
+
+    private int añoPublicacion;
     private int numPaginas;
     private String idioma;
     private int copiasTotales;
@@ -23,10 +29,11 @@ public class Libro {
     private BigDecimal precio;
     private EstadoFisico estadoFisico;
 
+
     public Libro() {
-        this.idioma = "Español";
-        this.copiasTotales = 1;
-        this.copiasDisponibles = 1;
+        this.autores = new ArrayList<>();
+        this.editorial = new Editorial(); // Inicializar para evitar NullPointerException
+        this.categoria = new Categoria();
         this.estadoFisico = EstadoFisico.BUENO;
         this.fechaAdquisicion = LocalDate.now();
     }
@@ -44,11 +51,15 @@ public class Libro {
     public Editorial getEditorial() { return editorial; }
     public void setEditorial(Editorial editorial) { this.editorial = editorial; }
 
-    public int getAñoPublicacion() { return añoPublicacion; }
-    public void setAñoPublicacion(int añoPublicacion) { this.añoPublicacion = añoPublicacion; }
-
     public Categoria getCategoria() { return categoria; }
     public void setCategoria(Categoria categoria) { this.categoria = categoria; }
+
+    public List<Autor> getAutores() { return autores; }
+    public void setAutores(List<Autor> autores) { this.autores = autores; }
+    public void addAutor(Autor autor) { this.autores.add(autor); }
+
+    public int getAñoPublicacion() { return añoPublicacion; }
+    public void setAñoPublicacion(int añoPublicacion) { this.añoPublicacion = añoPublicacion; }
 
     public int getNumPaginas() { return numPaginas; }
     public void setNumPaginas(int numPaginas) { this.numPaginas = numPaginas; }
@@ -60,9 +71,7 @@ public class Libro {
     public void setCopiasTotales(int copiasTotales) { this.copiasTotales = copiasTotales; }
 
     public int getCopiasDisponibles() { return copiasDisponibles; }
-    public void setCopiasDisponibles(int copiasDisponibles) {
-        this.copiasDisponibles = copiasDisponibles;
-    }
+    public void setCopiasDisponibles(int copiasDisponibles) { this.copiasDisponibles = copiasDisponibles; }
 
     public String getUbicacion() { return ubicacion; }
     public void setUbicacion(String ubicacion) { this.ubicacion = ubicacion; }
@@ -74,9 +83,7 @@ public class Libro {
     public void setPortadaUrl(String portadaUrl) { this.portadaUrl = portadaUrl; }
 
     public LocalDate getFechaAdquisicion() { return fechaAdquisicion; }
-    public void setFechaAdquisicion(LocalDate fechaAdquisicion) {
-        this.fechaAdquisicion = fechaAdquisicion;
-    }
+    public void setFechaAdquisicion(LocalDate fechaAdquisicion) { this.fechaAdquisicion = fechaAdquisicion; }
 
     public BigDecimal getPrecio() { return precio; }
     public void setPrecio(BigDecimal precio) { this.precio = precio; }
@@ -84,29 +91,20 @@ public class Libro {
     public EstadoFisico getEstadoFisico() { return estadoFisico; }
     public void setEstadoFisico(EstadoFisico estadoFisico) { this.estadoFisico = estadoFisico; }
 
-    // Métodos de negocio
-    public boolean estaDisponible() {
-        return this.copiasDisponibles > 0;
-    }
-
-    public void decrementarDisponibilidad() {
-        if (this.copiasDisponibles > 0) {
-            this.copiasDisponibles--;
-        }
-    }
-
-    public void incrementarDisponibilidad() {
-        if (this.copiasDisponibles < this.copiasTotales) {
-            this.copiasDisponibles++;
-        }
-    }
-
+    // Helpers para la Vista
     public String getDisponibilidadTexto() {
         return copiasDisponibles + "/" + copiasTotales;
     }
 
-    @Override
-    public String toString() {
-        return titulo + " (" + isbn + ")";
+    public boolean estaDisponible() {
+        return copiasDisponibles > 0;
     }
+
+    public String getNombresAutores() {
+        if (autores == null || autores.isEmpty()) return "Anónimo";
+        return autores.stream().map(Autor::getNombreCompleto).collect(Collectors.joining(", "));
+    }
+
+    @Override
+    public String toString() { return titulo; }
 }

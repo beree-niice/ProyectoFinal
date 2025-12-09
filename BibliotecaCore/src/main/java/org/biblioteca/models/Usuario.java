@@ -1,7 +1,7 @@
 package org.biblioteca.models;
 
-import org.biblioteca.models.enums.EstadoUsuario;
 import org.biblioteca.models.enums.TipoUsuario;
+import org.biblioteca.models.enums.EstadoUsuario;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -22,17 +22,10 @@ public class Usuario {
 
     // Constructores
     public Usuario() {
-        this.fechaRegistro = LocalDate.now();
+        this.tipoUsuario = TipoUsuario.LECTOR;  // Por defecto
         this.estado = EstadoUsuario.ACTIVO;
         this.limitePrestamos = 3;
-    }
-
-    public Usuario(String dni, String nombre, String email, TipoUsuario tipo) {
-        this();
-        this.dni = dni;
-        this.nombre = nombre;
-        this.email = email;
-        this.tipoUsuario = tipo;
+        this.fechaRegistro = LocalDate.now();
     }
 
     // Getters y Setters
@@ -74,7 +67,7 @@ public class Usuario {
         this.fechaUltimaActividad = fechaUltimaActividad;
     }
 
-    // Métodos de negocio
+    // Métodos helper para verificar tipo de usuario
     public boolean esAdmin() {
         return this.tipoUsuario == TipoUsuario.ADMIN;
     }
@@ -83,12 +76,28 @@ public class Usuario {
         return this.tipoUsuario == TipoUsuario.BIBLIOTECARIO;
     }
 
-    public boolean puedeRealizarPrestamo() {
+    public boolean esLector() {
+        return this.tipoUsuario == TipoUsuario.LECTOR;
+    }
+
+    public boolean estaActivo() {
         return this.estado == EstadoUsuario.ACTIVO;
+    }
+
+    public boolean estaSuspendido() {
+        return this.estado == EstadoUsuario.SUSPENDIDO;
+    }
+
+    public boolean esMoroso() {
+        return this.estado == EstadoUsuario.MOROSO;
+    }
+
+    public String getNombreCompleto() {
+        return nombre;
     }
 
     @Override
     public String toString() {
-        return nombre + " (" + dni + ")";
+        return nombre + " (" + tipoUsuario.getNombre() + ")";
     }
 }
