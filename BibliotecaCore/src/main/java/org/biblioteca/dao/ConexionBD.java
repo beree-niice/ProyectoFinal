@@ -7,7 +7,7 @@ import java.sql.SQLException;
 
 public class ConexionBD {
     private static ConexionBD instance;
-    private Connection connection;
+    private static Connection connection;
 
     // Configuración de la base de datos
     private static final String URL = "jdbc:mysql://localhost:3306/biblioteca_digital";
@@ -36,7 +36,7 @@ public class ConexionBD {
         return instance;
     }
 
-    public Connection getConnection() throws SQLException {
+    public static Connection getConnection() throws SQLException {
         if (connection == null || connection.isClosed()) {
             connection = DriverManager.getConnection(URL, USER, PASSWORD);
         }

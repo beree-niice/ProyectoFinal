@@ -108,6 +108,87 @@ public class LibroDAO extends GenericDAO<Libro, Integer> {
     }
 
     // ========== MÉTODOS ESPECÍFICOS DE LIBRO ==========
+    // 1. Sobrescribir findAll para traer DATOS REALES (Nombres) y no solo IDs
+    @Override
+    public List<Libro> findAll() {
+        List<Libro> libros = new ArrayList<>();
+        // Hacemos JOIN para traer el nombre de la editorial y categoría en una sola consulta
+        String sql = "SELECT l.*, e.nombre as nom_editorial, c.nombre as nom_categoria " +
+                "FROM libro l " +
+                "LEFT JOIN editorial e ON l.id_editorial = e.id_editorial " +
+                "LEFT JOIN categoria c ON l.id_categoria = c.id_categoria " +
+                "ORDER BY l.titulo";
+
+        try (Statement stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                Libro libro = mapResultSetToEntity(rs);
+
+                // Si usamos el query con JOIN, llenamos los nombres extra
+                try {
+                    libro.getEditorial().setNombre(rs.getString("nom_editorial"));
+                    libro.getCategoria().setNombre(rs.getString("nom_categoria"));
+                } catch (SQLException e) { /* Ignorar si columna no existe */ }
+
+                // IMPORTANTE: Cargar autores (Relación N:M)
+                libro.setAutores(obtenerAutoresPorLibro(libro.getIdLibro()));
+
+                libros.add(libro);
+            }
+        } catch (SQLException e) {
+            handleSQLException("Error al listar libros con detalles", e);
+        }
+        return libros;
+    }
+
+    // 2. Método auxiliar para cargar autores
+    private List<org.biblioteca.models.Autor> obtenerAutoresPorLibro(int idLibro) {
+        List<org.biblioteca.models.Autor> autores = new ArrayList<>();
+        String sql = "SELECT a.* FROM autor a " +
+                "INNER JOIN libro_autor la ON a.id_autor = la.id_autor " +
+                "WHERE la.id_libro = ?";
+
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setInt(1, idLibro);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                org.biblioteca.models.Autor a = new org.biblioteca.models.Autor();
+                a.setIdAutor(rs.getInt("id_autor"));
+                a.setNombreCompleto(rs.getString("nombre_completo"));
+                autores.add(a);
+            }
+        } catch (SQLException e) {
+            System.err.println("Error cargando autores: " + e.getMessage());
+        }
+        return autores;
+    }
+
+    // 3. Sobrescribir save para guardar la relación en libro_autor
+    @Override
+    public Libro save(Libro entity) {
+        // Primero guardamos el libro
+        Libro libroGuardado = super.save(entity);
+
+        // Si se guardó bien y tiene autores, guardamos la relación
+        if (libroGuardado != null && entity.getAutores() != null && !entity.getAutores().isEmpty()) {
+            guardarRelacionAutores(libroGuardado.getIdLibro(), entity.getAutores());
+        }
+        return libroGuardado;
+    }
+
+    private void guardarRelacionAutores(int idLibro, List<org.biblioteca.models.Autor> autores) {
+        String sql = "INSERT INTO libro_autor (id_libro, id_autor) VALUES (?, ?)";
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            for (org.biblioteca.models.Autor autor : autores) {
+                stmt.setInt(1, idLibro);
+                stmt.setInt(2, autor.getIdAutor());
+                stmt.addBatch(); // Optimización por lotes
+            }
+            stmt.executeBatch();
+        } catch (SQLException e) {
+            System.err.println("Error guardando relación autores: " + e.getMessage());
+        }
+    }
 
     public Optional<Libro> findByIsbn(String isbn) {
         String sql = "SELECT * FROM libro WHERE isbn = ?";
@@ -261,4 +342,5 @@ public class LibroDAO extends GenericDAO<Libro, Integer> {
         }
         return libros;
     }
+
 }
