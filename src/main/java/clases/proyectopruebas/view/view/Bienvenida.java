@@ -192,10 +192,7 @@ public class Bienvenida extends Application {
         iconosBox.setAlignment(Pos.CENTER);
 
         VBox[] caracteristicas = {
-                crearCaracteristica("📚", "Catálogo extenso", "Miles de libros disponibles"),
-                crearCaracteristica("⏱️", "Préstamos en línea", "Gestiona desde cualquier lugar"),
-                crearCaracteristica("🔔", "Notificaciones", "Recordatorios automáticos"),
-                crearCaracteristica("📊", "Estadísticas", "Sigue tu progreso de lectura")
+                crearCaracteristica("📚", "Catálogo variado", "Multiples libros disponibles")
         };
 
         iconosBox.getChildren().addAll(caracteristicas);
@@ -239,11 +236,11 @@ public class Bienvenida extends Application {
         footer.setPadding(new Insets(20, 0, 20, 0));
         footer.setStyle("-fx-background-color: rgba(0, 0, 0, 0.2);");
 
-        Label versionLabel = new Label("Versión 1.0");
+        Label versionLabel = new Label("Versión 2.0");
         versionLabel.setFont(Font.font("Arial", 10));
         versionLabel.setTextFill(Color.LIGHTGRAY);
 
-        Label derechosLabel = new Label("© 2024 Biblioteca Digital - Todos los derechos reservados");
+        Label derechosLabel = new Label("© 2025 Biblioteca Digital - TOPICOS AVANZADOS DE PROGRAMACIÓN");
         derechosLabel.setFont(Font.font("Arial", 10));
         derechosLabel.setTextFill(Color.LIGHTGRAY);
 

@@ -78,7 +78,6 @@ public class AdminView {
 
         Button[] systemButtons = {
                 createAdminButton("Gestionar Usuarios", "manageUsers"),
-                createAdminButton("Gestionar Bibliotecarios", "manageLibrarians"),
                 createAdminButton("Configuracion Sistema", "systemConfig"),
                 createAdminButton("Permisos y Roles", "permissions"),
                 createAdminButton("Auditoria y Logs", "audit")

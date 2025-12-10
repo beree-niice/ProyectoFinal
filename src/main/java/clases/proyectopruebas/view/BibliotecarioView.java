@@ -238,15 +238,12 @@ public class BibliotecarioView {
         Stage currentStage = (Stage) logoutBtn.getScene().getWindow();
         currentStage.close();
 
-        // Mostrar la ventana de Bienvenida
         try {
             Stage bienvenidaStage = new Stage();
             Bienvenida bienvenida = new Bienvenida();
-           // bienvenidaStage.setScene(new Scene(bienvenida.getView(), 600, 400));
-            bienvenidaStage.setTitle("Biblioteca Digital - Bienvenida");
-            bienvenidaStage.show();
+            bienvenida.start(bienvenidaStage);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
-}
+    }

@@ -58,7 +58,7 @@ public class login {
 
             mainLayout.setStyle("-fx-background-color: linear-gradient(to bottom, #adcbe8, #2b3d4e);");
 
-            Scene scene = new Scene(mainLayout, 550, 550); // Aumentado para la imagen
+            Scene scene = new Scene(mainLayout, 800, 700); // Aumentado para la imagen
 
             loginButton.setOnAction(e -> handleLogin(primaryStage));
 
