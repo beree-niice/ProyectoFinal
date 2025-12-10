@@ -8,12 +8,14 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.stage.Stage;
 
 import java.util.Optional;
 
@@ -23,6 +25,7 @@ public class Gestion_usuarios {
     private TableView<Usuario> userTable;
     private ObservableList<Usuario> userData;
     private Label resultLabel;
+    private Stage currentStage;
 
     public Gestion_usuarios() {
         this.controller = new GestionUsuariosController();
@@ -30,10 +33,16 @@ public class Gestion_usuarios {
     }
 
     public BorderPane getView() {
+        return getView(null);
+    }
+
+    public BorderPane getView(Stage stage) {
+        this.currentStage = stage;
+
         BorderPane layout = new BorderPane();
         layout.setPadding(new Insets(20));
 
-        Label title = new Label("GESTION DE USUARIOS");
+        Label title = new Label("GESTIÓN DE USUARIOS");
         title.setFont(Font.font("Arial", FontWeight.BOLD, 24));
         title.setTextFill(Color.web("#2c3e50"));
         title.setPadding(new Insets(0, 0, 20, 0));
@@ -98,7 +107,7 @@ public class Gestion_usuarios {
             updateResultLabel();
         });
 
-        Button refreshBtn = new Button("⟳Actualizar lista");
+        Button refreshBtn = new Button("⟳");
         refreshBtn.setStyle("-fx-background-color: #2ecc71; -fx-text-fill: white; -fx-font-weight: bold;");
         refreshBtn.setTooltip(new Tooltip("Actualizar lista"));
         refreshBtn.setOnAction(e -> {
@@ -204,15 +213,45 @@ public class Gestion_usuarios {
         Button editBtn = createActionButton("Editar Usuario", "#f39c12");
         Button changeEstadoBtn = createActionButton("Cambiar Estado", "#9b59b6");
         Button deleteBtn = createActionButton("Eliminar Usuario", "#e74c3c");
-        Button exportBtn = createActionButton("Exportar", "#2ecc71");
+
+        // Botón de exportación mejorado
+        Button exportBtn = new Button("📥 Exportar CSV");
+        exportBtn.setStyle("-fx-background-color: #2ecc71;" +
+                "-fx-text-fill: white;" +
+                "-fx-font-weight: bold;" +
+                "-fx-padding: 10 20;" +
+                "-fx-background-radius: 5;" +
+                "-fx-cursor: hand;");
+        exportBtn.setMinWidth(120);
+        exportBtn.setTooltip(new Tooltip("Exportar usuarios a archivo CSV"));
+
+        // Menú desplegable para opciones de exportación
+        MenuButton exportMenu = new MenuButton("📥 Exportar CSV");
+        exportMenu.setStyle("-fx-background-color: #2ecc71;" +
+                "-fx-text-fill: white;" +
+                "-fx-font-weight: bold;" +
+                "-fx-padding: 10 20;" +
+                "-fx-background-radius: 5;" +
+                "-fx-cursor: hand;");
+        exportMenu.setMinWidth(120);
+
+        MenuItem exportFilteredItem = new MenuItem("Exportar usuarios filtrados");
+        exportFilteredItem.setOnAction(e -> exportFilteredUsers());
+
+        MenuItem exportAllItem = new MenuItem("Exportar todos los usuarios");
+        exportAllItem.setOnAction(e -> exportAllUsers());
+
+        MenuItem previewCSVItem = new MenuItem("Vista previa CSV");
+        previewCSVItem.setOnAction(e -> showCSVPreview());
+
+        exportMenu.getItems().addAll(exportFilteredItem, exportAllItem, new SeparatorMenuItem(), previewCSVItem);
 
         viewBtn.setOnAction(e -> viewUserDetails());
         editBtn.setOnAction(e -> editUser());
         changeEstadoBtn.setOnAction(e -> changeUserEstado());
         deleteBtn.setOnAction(e -> deleteUser());
-        exportBtn.setOnAction(e -> exportUsers());
 
-        buttonBox.getChildren().addAll(viewBtn, editBtn, changeEstadoBtn, deleteBtn, exportBtn);
+        buttonBox.getChildren().addAll(viewBtn, editBtn, changeEstadoBtn, deleteBtn, exportMenu);
         return buttonBox;
     }
 
@@ -287,16 +326,150 @@ public class Gestion_usuarios {
         });
     }
 
-    private void exportUsers() {
-        // Implementación básica de exportación
-        Alert info = new Alert(Alert.AlertType.INFORMATION);
-        info.setTitle("Exportar Usuarios");
-        info.setHeaderText("Funcionalidad de Exportación");
-        info.setContentText("Exportando " + userData.size() + " usuarios...\n" +
-                "Formato: CSV\n" +
-                "Esta funcionalidad está en desarrollo.");
-        info.showAndWait();
+    // ========== MÉTODOS DE EXPORTACIÓN ==========
+
+    private void exportFilteredUsers() {
+        if (currentStage == null) {
+            currentStage = (Stage) userTable.getScene().getWindow();
+        }
+
+        if (userData.isEmpty()) {
+            showAlert("Exportación cancelada", "No hay usuarios para exportar con los filtros actuales.");
+            return;
+        }
+
+        boolean success = controller.exportCurrentFilteredUsers(currentStage);
+        if (success) {
+            // Opcional: abrir carpeta de descargas
+            openExportInfoDialog();
+        }
     }
+
+    private void exportAllUsers() {
+        if (currentStage == null) {
+            currentStage = (Stage) userTable.getScene().getWindow();
+        }
+
+        boolean success = controller.exportAllUsers(currentStage);
+        if (success) {
+            openExportInfoDialog();
+        }
+    }
+
+    private void showCSVPreview() {
+        if (userData.isEmpty()) {
+            showAlert("Vista previa", "No hay usuarios para mostrar.");
+            return;
+        }
+
+        StringBuilder csvPreview = new StringBuilder();
+        csvPreview.append("ID;DNI;Nombre;Email;Teléfono;Tipo;Estado;Límite\n");
+
+        // Mostrar solo los primeros 10 registros para la vista previa
+        int limit = Math.min(10, userData.size());
+        for (int i = 0; i < limit; i++) {
+            Usuario usuario = userData.get(i);
+            csvPreview.append(String.format("%d;%s;%s;%s;%s;%s;%s;%d\n",
+                    usuario.getIdUsuario(),
+                    usuario.getDni(),
+                    usuario.getNombre(),
+                    usuario.getEmail(),
+                    usuario.getTelefono(),
+                    usuario.getTipoUsuario().getNombre(),
+                    usuario.getEstado().getNombre(),
+                    usuario.getLimitePrestamos()
+            ));
+        }
+
+        if (userData.size() > limit) {
+            csvPreview.append(String.format("\n... y %d usuarios más", userData.size() - limit));
+        }
+
+        TextArea previewArea = new TextArea(csvPreview.toString());
+        previewArea.setEditable(false);
+        previewArea.setStyle("-fx-font-family: 'Monospaced'; -fx-font-size: 12px;");
+        previewArea.setPrefSize(600, 400);
+
+        Alert previewDialog = new Alert(Alert.AlertType.INFORMATION);
+        previewDialog.setTitle("Vista previa CSV");
+        previewDialog.setHeaderText("Formato del archivo CSV (primeras " + limit + " filas)");
+        previewDialog.getDialogPane().setContent(previewArea);
+        previewDialog.getDialogPane().setPrefSize(620, 450);
+        previewDialog.showAndWait();
+    }
+
+    private void openExportInfoDialog() {
+        Alert infoDialog = new Alert(Alert.AlertType.INFORMATION);
+        infoDialog.setTitle("Información de exportación");
+        infoDialog.setHeaderText("Archivo CSV exportado exitosamente");
+
+        VBox content = new VBox(10);
+        content.setPadding(new Insets(10));
+
+        Label info1 = new Label("✓ El archivo CSV está listo para usar en:");
+        info1.setStyle("-fx-font-weight: bold;");
+
+        VBox programsList = new VBox(5);
+        programsList.getChildren().addAll(
+                new Label("• Microsoft Excel"),
+                new Label("• Google Sheets"),
+                new Label("• LibreOffice Calc"),
+                new Label("• Cualquier editor de texto")
+        );
+
+        Label info2 = new Label("✓ Formato compatible:");
+        info2.setStyle("-fx-font-weight: bold;");
+
+        VBox formatList = new VBox(5);
+        formatList.getChildren().addAll(
+                new Label("• Separador: Punto y coma (;)"),
+                new Label("• Codificación: UTF-8"),
+                new Label("• Texto entre comillas dobles"),
+                new Label("• Encabezados incluidos")
+        );
+
+        Button openHelpBtn = new Button("¿Cómo abrir en Excel?");
+        openHelpBtn.setStyle("-fx-background-color: #3498db; -fx-text-fill: white;");
+        openHelpBtn.setOnAction(e -> showExcelHelp());
+
+        content.getChildren().addAll(info1, programsList, new Separator(), info2, formatList, openHelpBtn);
+
+        infoDialog.getDialogPane().setContent(content);
+        infoDialog.getDialogPane().setPrefSize(400, 350);
+        infoDialog.showAndWait();
+    }
+
+    private void showExcelHelp() {
+        Alert helpDialog = new Alert(Alert.AlertType.INFORMATION);
+        helpDialog.setTitle("Ayuda para abrir en Excel");
+        helpDialog.setHeaderText("Pasos para abrir el CSV en Excel:");
+
+        VBox steps = new VBox(10);
+        steps.setPadding(new Insets(10));
+
+        steps.getChildren().addAll(
+                createStepLabel("1. Abra Microsoft Excel"),
+                createStepLabel("2. Vaya a 'Datos' → 'Obtener datos externos' → 'Desde texto'"),
+                createStepLabel("3. Seleccione el archivo CSV exportado"),
+                createStepLabel("4. En el asistente de importación:"),
+                createStepLabel("   • Paso 1: Seleccione 'Delimitado'"),
+                createStepLabel("   • Paso 2: Marque 'Punto y coma' como delimitador"),
+                createStepLabel("   • Paso 3: Formato de columna: 'General'"),
+                createStepLabel("5. Haga clic en 'Finalizar' y luego en 'Aceptar'")
+        );
+
+        helpDialog.getDialogPane().setContent(steps);
+        helpDialog.getDialogPane().setPrefSize(500, 300);
+        helpDialog.showAndWait();
+    }
+
+    private Label createStepLabel(String text) {
+        Label label = new Label(text);
+        label.setWrapText(true);
+        return label;
+    }
+
+    // ========== MÉTODOS DE DIÁLOGO ==========
 
     private void showUserDetailsDialog(Usuario usuario) {
         Dialog<Void> dialog = new Dialog<>();
