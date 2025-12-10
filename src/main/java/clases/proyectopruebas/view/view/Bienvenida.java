@@ -52,7 +52,7 @@ public class Bienvenida extends Application {
 
         try {
             // Intenta cargar la imagen del encabezado
-            Image logoImage = new Image(getClass().getResourceAsStream("/imagenes/EncabezadoLogin.jpg"));
+            Image logoImage = new Image(getClass().getResourceAsStream("/imagenes/Bienvenida.jpg"));
             ImageView logoView = new ImageView(logoImage);
 
             // Ajustar tamaño
