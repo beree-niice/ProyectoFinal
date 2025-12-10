@@ -13,6 +13,8 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.scene.Scene;
+import javafx.stage.Stage;
 
 import java.util.List;
 
@@ -21,6 +23,7 @@ public class LectorView {
     private Usuario usuario;
     private LibroDAO libroDAO = new LibroDAO();
     private PrestamoDAO prestamoDAO = new PrestamoDAO();
+    private Button logoutBtn;
 
     public BorderPane getView(Usuario usuario) {
         this.usuario = usuario;
@@ -53,9 +56,9 @@ public class LectorView {
         Label userInfo = new Label(usuario.getNombre() + " | DNI: " + usuario.getDni());
         userInfo.setTextFill(Color.WHITE);
 
-        Button logoutBtn = new Button("Cerrar Sesion");
+        logoutBtn = new Button("Cerrar Sesión");
         logoutBtn.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-weight: bold;");
-        logoutBtn.setOnAction(e -> returnToLogin());
+        logoutBtn.setOnAction(e -> returnToBienvenida());
 
         topBar.getChildren().addAll(title, spacer, userInfo, logoutBtn);
         return topBar;
@@ -67,15 +70,15 @@ public class LectorView {
         menu.setPrefWidth(200);
         menu.setStyle("-fx-background-color: #ecf0f1;");
 
-        Label menuTitle = new Label("MENU LECTOR");
+        Label menuTitle = new Label("MENÚ LECTOR");
         menuTitle.setFont(Font.font("Arial", FontWeight.BOLD, 16));
         menuTitle.setTextFill(Color.web("#27ae60"));
 
         Button[] buttons = {
                 createMenuButton("Buscar Libros", "search"),
                 createMenuButton("Mi Perfil", "profile"),
-                createMenuButton("Mis Prestamos", "myLoans"),
-                createMenuButton("Prestamos Activos", "activeLoans"),
+                createMenuButton("Mis Préstamos", "myLoans"),
+                createMenuButton("Préstamos Activos", "activeLoans"),
                 createMenuButton("Historial", "history"),
                 createMenuButton("Libros Favoritos", "favorites")
         };
@@ -128,6 +131,7 @@ public class LectorView {
 
     private void handleMenuAction(String action) {
         // Implementar cambio de vistas según la acción
+        System.out.println("Acción seleccionada: " + action);
     }
 
     private VBox createSearchView() {
@@ -170,24 +174,28 @@ public class LectorView {
         añoCol.setCellValueFactory(new PropertyValueFactory<>("añoPublicacion"));
         añoCol.setPrefWidth(80);
 
-        TableColumn<Libro, String> disponibilidadCol = new TableColumn<>("Disponible");
+        // COLUMNA CORREGIDA - Usando Integer en lugar de String
+        TableColumn<Libro, Integer> disponibilidadCol = new TableColumn<>("Disponible");
         disponibilidadCol.setCellValueFactory(new PropertyValueFactory<>("copiasDisponibles"));
-        disponibilidadCol.setCellFactory(col -> new TableCell<Libro, String>() {
+        disponibilidadCol.setCellFactory(col -> new TableCell<Libro, Integer>() {
             @Override
-            protected void updateItem(String item, boolean empty) {
+            protected void updateItem(Integer item, boolean empty) {
                 super.updateItem(item, empty);
                 if (empty || item == null) {
                     setText(null);
                     setStyle("");
                 } else {
-                    Libro libro = getTableView().getItems().get(getIndex());
-                    setText(libro.estaDisponible() ? "Sí" : "No");
-                    setStyle(libro.estaDisponible() ?
+                    // Usar el método estaDisponible() si existe en la clase Libro
+                    // o verificar directamente con item > 0
+                    boolean disponible = item > 0;
+                    setText(disponible ? "Sí" : "No");
+                    setStyle(disponible ?
                             "-fx-text-fill: green; -fx-font-weight: bold;" :
                             "-fx-text-fill: red; -fx-font-weight: bold;");
                 }
             }
         });
+        disponibilidadCol.setPrefWidth(100);
 
         TableColumn<Libro, Void> actionCol = new TableColumn<>("Acción");
         actionCol.setCellFactory(col -> new TableCell<Libro, Void>() {
@@ -208,7 +216,9 @@ public class LectorView {
                     setGraphic(null);
                 } else {
                     Libro libro = getTableView().getItems().get(getIndex());
-                    prestarBtn.setDisable(!libro.estaDisponible());
+                    // Verificar si el libro está disponible
+                    boolean disponible = libro.getCopiasDisponibles() > 0;
+                    prestarBtn.setDisable(!disponible);
                     setGraphic(prestarBtn);
                 }
             }
@@ -226,17 +236,38 @@ public class LectorView {
 
     private void performSearch(String query) {
         // Implementar búsqueda
+        if (query != null && !query.trim().isEmpty()) {
+            System.out.println("Buscando: " + query);
+            // Aquí puedes implementar la lógica de búsqueda
+            // List<Libro> resultados = libroDAO.buscarPorTermino(query);
+            // Actualizar la tabla con los resultados
+        }
     }
 
     private void solicitarPrestamo(Libro libro) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
         alert.setTitle("Solicitar Préstamo");
         alert.setHeaderText("Funcionalidad en desarrollo");
-        alert.setContentText("Para solicitar préstamo, contacte a un bibliotecario.");
+        alert.setContentText("Para solicitar préstamo, contacte a un bibliotecario.\n\n" +
+                "Libro seleccionado: " + libro.getTitulo() + "\n" +
+                "ISBN: " + libro.getIsbn());
         alert.showAndWait();
     }
 
-    private void returnToLogin() {
-        // Implementar retorno a login
+    private void returnToBienvenida() {
+        // Cerrar la ventana actual
+        Stage currentStage = (Stage) logoutBtn.getScene().getWindow();
+        currentStage.close();
+
+        // Mostrar la ventana de Bienvenida
+        try {
+            Stage bienvenidaStage = new Stage();
+            Bienvenida bienvenida = new Bienvenida();
+           // bienvenidaStage.setScene(new Scene(bienvenida.getView(), 600, 400));
+            bienvenidaStage.setTitle("Biblioteca Digital - Bienvenida");
+            bienvenidaStage.show();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }

@@ -60,7 +60,7 @@ public class Libro {
     public void addAutor(Autor autor) { this.autores.add(autor); }
 
     public int getAnioPublicacion() { return anioPublicacion; }
-    public void setAnioPublicacion(int añoPublicacion) { this.anioPublicacion = añoPublicacion; }
+    public void setAnioPublicacion(int añoPublicacion) { this.anioPublicacion = anioPublicacion; }
 
     public int getNumPaginas() { return numPaginas; }
     public void setNumPaginas(int numPaginas) { this.numPaginas = numPaginas; }

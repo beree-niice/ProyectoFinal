@@ -1,6 +1,5 @@
 package clases.proyectopruebas.view;
 
-
 import clases.proyectopruebas.controllers.LibroController;
 import clases.proyectopruebas.models.Autor;
 import clases.proyectopruebas.models.Categoria;
@@ -119,8 +118,7 @@ public class LibroView extends JFrame {
             public boolean isCellEditable(int row, int column) { return false; }
             @Override
             public Class<?> getColumnClass(int columnIndex) {
-                if (columnIndex == 0 || columnIndex == 6) return Integer.class;
-                return String.class;
+                return columnIndex == 0 ? Integer.class : String.class;
             }
         };
 
@@ -148,15 +146,28 @@ public class LibroView extends JFrame {
                     c.setForeground(Color.BLACK);
                 }
 
-                // Columna Stock (Index 6)
-                if (column == 6) {
+                // Columna Stock (Index 6) - Formato "Disponible/Total"
+                if (column == 6 && value != null) {
                     setHorizontalAlignment(CENTER);
-                    String stockInfo = value.toString(); // Formato: "5/10"
-                    if (stockInfo.startsWith("0/")) {
-                        c.setForeground(COLOR_DANGER);
-                        setFont(getFont().deriveFont(Font.BOLD));
-                    } else {
-                        c.setForeground(new Color(39, 174, 96));
+                    String stockInfo = value.toString();
+
+                    try {
+                        String[] partes = stockInfo.split("/");
+                        if (partes.length == 2) {
+                            int disponibles = Integer.parseInt(partes[0].trim());
+                            int total = Integer.parseInt(partes[1].trim());
+
+                            if (disponibles == 0) {
+                                c.setForeground(COLOR_DANGER);
+                                setFont(getFont().deriveFont(Font.BOLD));
+                            } else if (disponibles < total / 2) {
+                                c.setForeground(Color.ORANGE.darker());
+                            } else {
+                                c.setForeground(new Color(39, 174, 96));
+                            }
+                        }
+                    } catch (NumberFormatException e) {
+                        // Si hay error en el formato, mantener color por defecto
                     }
                 } else {
                     setHorizontalAlignment(LEFT);
@@ -272,12 +283,13 @@ public class LibroView extends JFrame {
                     l.getIdLibro(),
                     l.getIsbn(),
                     l.getTitulo(),
-                    l.getNombresAutores(), // Usamos el helper del modelo
+                    l.getNombresAutores(),
                     l.getEditorial() != null ? l.getEditorial().getNombre() : "Sin Editorial",
                     l.getCategoria() != null ? l.getCategoria().getNombre() : "Sin Categoría",
-                    l.getDisponibilidadTexto(),
+                    // Formato: "Disponibles/Total"
+                    l.getCopiasDisponibles() + "/" + l.getCopiasTotales(),
                     l.getPrecio() != null ? String.format("$%.2f", l.getPrecio()) : "N/A",
-                    l.getEstadoFisico()
+                    l.getEstadoFisico() != null ? l.getEstadoFisico().toString() : "N/A"
             });
         }
         lblEstadisticas.setText(controller.obtenerEstadisticas());
@@ -371,8 +383,6 @@ public class LibroView extends JFrame {
         private JComboBox<Categoria> cmbCategoria;
         private JComboBox<String> cmbIdioma;
         private JComboBox<EstadoFisico> cmbEstado;
-
-        // Componente especial para Autores (Lista de selección múltiple)
         private JList<Autor> listAutores;
 
         public LibroDialog(JFrame parent, Libro libro) {
@@ -420,7 +430,7 @@ public class LibroView extends JFrame {
             JScrollPane scrollAutores = new JScrollPane(listAutores);
 
             // Construcción del Formulario (2 columnas)
-            agregarCampo(formPanel, gbc, 0, 0, "Título:", txtTitulo, 3); // Span 3
+            agregarCampo(formPanel, gbc, 0, 0, "Título:", txtTitulo, 3);
 
             agregarCampo(formPanel, gbc, 0, 1, "ISBN:", txtIsbn, 1);
             agregarCampo(formPanel, gbc, 2, 1, "Precio:", txtPrecio, 1);
@@ -483,7 +493,7 @@ public class LibroView extends JFrame {
         }
 
         private void cargarCombosYDatos() {
-            // Cargar datos auxiliares desde el Controller
+            // Cargar datos auxiliares
             DefaultComboBoxModel<Editorial> modelEd = new DefaultComboBoxModel<>();
             controller.obtenerEditoriales().forEach(modelEd::addElement);
             cmbEditorial.setModel(modelEd);
@@ -511,7 +521,6 @@ public class LibroView extends JFrame {
                 cmbIdioma.setSelectedItem(libroActual.getIdioma());
                 cmbEstado.setSelectedItem(libroActual.getEstadoFisico());
 
-                // Seleccionar Objetos en Combos (Gracias a equals() en los modelos)
                 if (libroActual.getEditorial() != null) cmbEditorial.setSelectedItem(libroActual.getEditorial());
                 if (libroActual.getCategoria() != null) cmbCategoria.setSelectedItem(libroActual.getCategoria());
 
@@ -520,7 +529,6 @@ public class LibroView extends JFrame {
                     int[] indices = new int[libroActual.getAutores().size()];
                     for (int i = 0; i < libroActual.getAutores().size(); i++) {
                         Autor autorLibro = libroActual.getAutores().get(i);
-                        // Buscar índice en el modelo de la lista
                         for (int j = 0; j < modelAutor.size(); j++) {
                             if (modelAutor.get(j).getIdAutor() == autorLibro.getIdAutor()) {
                                 indices[i] = j;
@@ -535,18 +543,25 @@ public class LibroView extends JFrame {
 
         private void guardar() {
             try {
-                // Mapeo de datos (Vista -> Modelo)
-                libroActual.setTitulo(txtTitulo.getText());
-                libroActual.setIsbn(txtIsbn.getText());
+                // Validaciones básicas
+                if (txtTitulo.getText().trim().isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "El título es obligatorio.");
+                    return;
+                }
+
+                // Mapeo de datos
+                libroActual.setTitulo(txtTitulo.getText().trim());
+                libroActual.setIsbn(txtIsbn.getText().trim());
                 libroActual.setNumPaginas(Integer.parseInt(txtPaginas.getText()));
                 libroActual.setAnioPublicacion(Integer.parseInt(txtAnio.getText()));
                 libroActual.setCopiasTotales(Integer.parseInt(txtCopiasTotal.getText()));
                 libroActual.setCopiasDisponibles(Integer.parseInt(txtCopiasDisp.getText()));
-                libroActual.setUbicacion(txtUbicacion.getText());
-                libroActual.setDescripcion(txtDescripcion.getText());
+                libroActual.setUbicacion(txtUbicacion.getText().trim());
+                libroActual.setDescripcion(txtDescripcion.getText().trim());
 
-                if (!txtPrecio.getText().isEmpty())
+                if (!txtPrecio.getText().isEmpty()) {
                     libroActual.setPrecio(new BigDecimal(txtPrecio.getText()));
+                }
 
                 libroActual.setEditorial((Editorial) cmbEditorial.getSelectedItem());
                 libroActual.setCategoria((Categoria) cmbCategoria.getSelectedItem());
@@ -572,8 +587,9 @@ public class LibroView extends JFrame {
                 }
 
             } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(this, "Por favor verifique los campos numéricos.", "Error de Formato", JOptionPane.WARNING_MESSAGE);
+                JOptionPane.showMessageDialog(this, "Por favor verifique los campos numéricos (año, páginas, copias, precio).", "Error de Formato", JOptionPane.WARNING_MESSAGE);
             } catch (Exception ex) {
+                ex.printStackTrace();
                 JOptionPane.showMessageDialog(this, "Error inesperado: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
         }

@@ -56,7 +56,7 @@ public class main extends Application {
         System.setProperty("prism.text", "t2k");
         System.setProperty("javafx.animation.fullspeed", "true");
 
-        System.out.println("Iniciando Biblioteca Digital v1.0");
+        System.out.println("Iniciando Biblioteca Digital version2.0");
         System.out.println("" + java.time.LocalDateTime.now());
 
         // Iniciar aplicación
