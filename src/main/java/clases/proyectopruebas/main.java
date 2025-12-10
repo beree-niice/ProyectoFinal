@@ -4,6 +4,7 @@ import clases.proyectopruebas.view.view.Bienvenida;
 import javafx.application.Application;
 import javafx.stage.Stage;
 
+
 public class main extends Application {
 
     @Override

@@ -1,10 +1,9 @@
 package clases.proyectopruebas.view;
 
-import clases.proyectopruebas.dao.UsuarioDAO;
+import clases.proyectopruebas.controllers.AdminController;
 import clases.proyectopruebas.models.Usuario;
 import clases.proyectopruebas.models.enums.TipoUsuario;
 import clases.proyectopruebas.view.view.Bienvenida;
-import clases.proyectopruebas.view.view.Gestion_usuarios;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -21,9 +20,12 @@ import javafx.stage.Stage;
 public class AdminView {
     private Usuario usuario;
     private Button logoutBtn;
+    private AdminController controller;
 
     public BorderPane getView(Usuario usuario) {
         this.usuario = usuario;
+        this.controller = new AdminController(usuario);
+
         BorderPane layout = new BorderPane();
         layout.setPadding(new Insets(10));
 
@@ -137,7 +139,8 @@ public class AdminView {
                 btn.setStyle("-fx-background-color: transparent;" +
                         "-fx-text-fill: #ecf0f1;"));
 
-        btn.setOnAction(e -> handleMenuAction(action));
+        // Usar el controlador para manejar la acción
+        btn.setOnAction(e -> controller.handleMenuAction(action));
         return btn;
     }
 
@@ -168,13 +171,11 @@ public class AdminView {
         grid.setStyle("-fx-background-color: #ecf0f1; -fx-border-radius: 10;");
 
         try {
-            UsuarioDAO usuarioDAO = new UsuarioDAO();
-
-            // Contar usuarios por tipo
-            long totalUsuarios = usuarioDAO.count();
-            long lectores = usuarioDAO.findByTipo(TipoUsuario.LECTOR).size();
-            long bibliotecarios = usuarioDAO.findByTipo(TipoUsuario.BIBLIOTECARIO).size();
-            long admins = usuarioDAO.findByTipo(TipoUsuario.ADMIN).size();
+            // Usar el controlador para obtener las estadísticas
+            long totalUsuarios = controller.getTotalUsers();
+            long lectores = controller.getUsersByTypeCount(TipoUsuario.LECTOR);
+            long bibliotecarios = controller.getUsersByTypeCount(TipoUsuario.BIBLIOTECARIO);
+            long admins = controller.getUsersByTypeCount(TipoUsuario.ADMIN);
 
             addStat(grid, "Total Usuarios", String.valueOf(totalUsuarios), 0, 0);
             addStat(grid, "Lectores", String.valueOf(lectores), 1, 0);
@@ -208,45 +209,8 @@ public class AdminView {
         grid.add(statBox, col, row);
     }
 
-    private void handleMenuAction(String action) {
-        switch (action) {
-            case "manageUsers":
-                showUserManagement();
-                break;
-            case "manageLibrarians":
-                showLibrarianManagement();
-                break;
-            case "systemConfig":
-                showSystemConfig();
-                break;
-        }
-    }
-
-    private void showUserManagement() {
-        Gestion_usuarios userView = new Gestion_usuarios();
-        Stage stage = new Stage();
-        stage.setScene(new Scene(userView.getView(), 1000, 700));
-        stage.setTitle("Gestión de Usuarios");
-        stage.show();
-    }
-
-    private void showLibrarianManagement() {
-        // Implementar gestión de bibliotecarios
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Gestión de Bibliotecarios");
-        alert.setHeaderText("Funcionalidad en desarrollo");
-        alert.showAndWait();
-    }
-
-    private void showSystemConfig() {
-        // Implementar configuración del sistema
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Configuración del Sistema");
-        alert.setHeaderText("Funcionalidad en desarrollo");
-        alert.showAndWait();
-    }
-    /** metodo para regresar al bienvenida al cerrar secion en la vista de admin**/
- private void returnToBienvenida() {
+    /** metodo para regresar al bienvenida al cerrar sesion en la vista de admin**/
+    private void returnToBienvenida() {
         // Cerrar la ventana actual
         Stage currentStage = (Stage) logoutBtn.getScene().getWindow();
         currentStage.close();
@@ -257,6 +221,18 @@ public class AdminView {
             bienvenida.start(bienvenidaStage);
         } catch (Exception e) {
             e.printStackTrace();
+
+            // Mostrar alerta si hay error
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Error");
+            alert.setHeaderText("No se pudo regresar a la pantalla de bienvenida");
+            alert.setContentText(e.getMessage());
+            alert.showAndWait();
         }
+    }
+
+    // Métodos públicos para obtener el controlador (opcional)
+    public AdminController getController() {
+        return controller;
     }
 }

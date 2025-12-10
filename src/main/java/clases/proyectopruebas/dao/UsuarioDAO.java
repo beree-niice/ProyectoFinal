@@ -414,4 +414,17 @@ public class UsuarioDAO extends GenericDAO<Usuario, Integer> {
             return false;
         }
     }
-}
+
+    public boolean performBackup() {
+        try {
+            System.out.println("Iniciando backup de la base de datos...");
+            System.out.println("Backup simulado completado exitosamente");
+            return true;
+
+        } catch (Exception e) {
+            System.err.println("Error en backup: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+    }
