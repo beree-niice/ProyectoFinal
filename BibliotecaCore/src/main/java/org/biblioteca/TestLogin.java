@@ -95,7 +95,7 @@ public class TestLogin {
             System.out.println("- Puede hacer préstamos: " + (authController.isBibliotecario() || authController.isAdmin() ? "SÍ" : "NO"));
             System.out.println("- Puede administrar usuarios: " + (authController.isAdmin() ? "SÍ" : "NO"));
             System.out.println("- Puede ver todos los préstamos: " + (authController.isBibliotecario() || authController.isAdmin() ? "SÍ" : "NO"));
-
+            System.out.println("Esto es solo de prueba");
         } else {
             System.out.println("✗ Error: Credenciales incorrectas o usuario inactivo");
         }
