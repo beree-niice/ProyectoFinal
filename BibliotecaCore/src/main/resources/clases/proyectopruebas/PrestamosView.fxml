@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.control.*?>
+
+<VBox xmlns="http://javafx.com/javafx/21.0.1" xmlns:fx="http://javafx.com/fxml/1" spacing="8" padding="10" fx:controller="clases.proyectopruebas.controllers.PrestamosViewController">
+    <HBox spacing="6">
+        <Button text="Nuevo Préstamo" onAction="#onNuevo"/>
+        <Button text="Devolver" onAction="#onDevolver"/>
+        <Button text="Renovar" onAction="#onRenovar"/>
+    </HBox>
+    <TableView fx:id="tablaPrestamos" VBox.vgrow="ALWAYS">
+        <columns>
+            <TableColumn text="ID" fx:id="colId" prefWidth="60"/>
+            <TableColumn text="Usuario" fx:id="colUsuario" prefWidth="220"/>
+            <TableColumn text="Libro" fx:id="colLibro" prefWidth="220"/>
+            <TableColumn text="Desde" fx:id="colDesde" prefWidth="120"/>
+            <TableColumn text="Hasta" fx:id="colHasta" prefWidth="120"/>
+            <TableColumn text="Devuelto" fx:id="colDevuelto" prefWidth="120"/>
+        </columns>
+    </TableView>
+</VBox>

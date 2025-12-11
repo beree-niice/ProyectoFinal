@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.control.*?>
+
+<VBox xmlns="http://javafx.com/javafx/21.0.1" xmlns:fx="http://javafx.com/fxml/1" spacing="8" padding="10" fx:controller="clases.proyectopruebas.controllers.ReportesViewController">
+    <HBox spacing="6">
+        <Button text="Generar PDF Libros Prestados" onAction="#onLibrosPrestados"/>
+        <Button text="Generar PDF Usuarios Morosos" onAction="#onUsuariosMorosos"/>
+    </HBox>
+    <Label fx:id="lblStatus" text=""/>
+</VBox>

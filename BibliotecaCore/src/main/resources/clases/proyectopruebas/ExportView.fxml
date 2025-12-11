@@ -1,0 +1,13 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.control.*?>
+
+<VBox xmlns="http://javafx.com/javafx/21.0.1" xmlns:fx="http://javafx.com/fxml/1" spacing="8" padding="10" fx:controller="clases.proyectopruebas.controllers.ExportViewController">
+    <HBox spacing="6">
+        <Button text="Exportar Libros a JSON" onAction="#onExportJson"/>
+        <Button text="Exportar Libros a CSV" onAction="#onExportCsv"/>
+        <Button text="Importar Libros desde JSON" onAction="#onImportJson"/>
+        <Button text="Importar Libros desde CSV" onAction="#onImportCsv"/>
+    </HBox>
+    <Label fx:id="lblStatus" text=""/>
+</VBox>

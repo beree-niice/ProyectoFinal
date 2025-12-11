@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.geometry.Insets?>
+
+<BorderPane xmlns="http://javafx.com/javafx/21.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="clases.proyectopruebas.controllers.MainController">
+    <top>
+        <ToolBar>
+            <Label text="Biblioteca Digital" style="-fx-font-size: 18px; -fx-font-weight: bold;"/>
+            <Pane HBox.hgrow="ALWAYS"/>
+            <Button text="Libros" onAction="#goLibros"/>
+            <Button text="Usuarios" onAction="#goUsuarios"/>
+            <Button text="Préstamos" onAction="#goPrestamos"/>
+            <Button text="Exportar/Importar" onAction="#goExport"/>
+            <Button text="Reportes" onAction="#goReportes"/>
+        </ToolBar>
+    </top>
+    <center>
+        <StackPane fx:id="contentArea" padding="10">
+            <Label text="Bienvenido a la Biblioteca Digital"/>
+        </StackPane>
+    </center>
+    <bottom>
+        <HBox spacing="10" padding="10">
+            <Label fx:id="statusLabel" text="Listo"/>
+        </HBox>
+    </bottom>
+</BorderPane>

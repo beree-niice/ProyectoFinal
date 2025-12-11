@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.control.*?>
+
+<VBox xmlns="http://javafx.com/javafx/21.0.1" xmlns:fx="http://javafx.com/fxml/1" spacing="8" padding="10" fx:controller="clases.proyectopruebas.controllers.UsuariosViewController">
+    <HBox spacing="6">
+        <TextField fx:id="txtBuscar" promptText="Buscar por nombre o DNI" HBox.hgrow="ALWAYS"/>
+        <Button text="Buscar" onAction="#onBuscar"/>
+        <Button text="Nuevo" onAction="#onNuevo"/>
+        <Button text="Editar" onAction="#onEditar"/>
+        <Button text="Eliminar" onAction="#onEliminar"/>
+    </HBox>
+    <TableView fx:id="tablaUsuarios" VBox.vgrow="ALWAYS">
+        <columns>
+            <TableColumn text="ID" fx:id="colId" prefWidth="60"/>
+            <TableColumn text="Nombre" fx:id="colNombre" prefWidth="220"/>
+            <TableColumn text="Email" fx:id="colEmail" prefWidth="220"/>
+            <TableColumn text="DNI" fx:id="colDni" prefWidth="140"/>
+            <TableColumn text="Estado" fx:id="colEstado" prefWidth="120"/>
+        </columns>
+    </TableView>
+</VBox>

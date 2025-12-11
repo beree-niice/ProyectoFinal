@@ -1,0 +1,1421 @@
+-- =====================================================
+-- BASE DE DATOS: BIBLIOTECA DIGITAL
+-- COMPATIBLE CON MYSQL 5.7
+-- =====================================================
+
+-- Eliminar base de datos si existe (CUIDADO: Borra todo)
+-- DROP DATABASE IF EXISTS biblioteca_digital;
+
+CREATE DATABASE IF NOT EXISTS biblioteca_digital
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_unicode_ci;
+
+USE biblioteca_digital;
+
+-- =====================================================
+-- TABLA: USUARIO
+-- =====================================================
+DROP TABLE IF EXISTS usuario;
+CREATE TABLE usuario (
+                         id_usuario INT NOT NULL AUTO_INCREMENT,
+                         dni VARCHAR(20) NOT NULL,
+                         nombre VARCHAR(100) NOT NULL,
+                         email VARCHAR(100) NOT NULL,
+                         telefono VARCHAR(20),
+                         direccion VARCHAR(200),
+                         tipo_usuario ENUM('ADMIN', 'BIBLIOTECARIO', 'LECTOR') NOT NULL,
+                         password_hash VARCHAR(255) NOT NULL,
+    -- MySQL 5.7 no soporta DEFAULT (CURRENT_DATE), usar CURRENT_TIMESTAMP
+                         fecha_registro DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                         estado ENUM('ACTIVO', 'SUSPENDIDO', 'MOROSO', 'INACTIVO') NOT NULL DEFAULT 'ACTIVO',
+                         limite_prestamos INT NOT NULL DEFAULT 3,
+                         fecha_ultima_actividad DATETIME,
+
+                         PRIMARY KEY (id_usuario),
+                         UNIQUE KEY unique_dni (dni),
+                         UNIQUE KEY unique_email (email),
+                         INDEX idx_dni (dni),
+                         INDEX idx_email (email),
+                         INDEX idx_tipo_usuario (tipo_usuario),
+                         INDEX idx_estado (estado)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- TABLA: CATEGORIA
+-- =====================================================
+DROP TABLE IF EXISTS categoria;
+CREATE TABLE categoria (
+                           id_categoria INT NOT NULL AUTO_INCREMENT,
+                           nombre VARCHAR(50) NOT NULL,
+                           descripcion TEXT,
+                           categoria_padre INT DEFAULT NULL,
+    -- MySQL 5.7 usa TINYINT(1) en lugar de BOOLEAN
+                           activa TINYINT(1) NOT NULL DEFAULT 1,
+                           codigo VARCHAR(10) DEFAULT NULL,
+
+                           PRIMARY KEY (id_categoria),
+                           UNIQUE KEY unique_nombre (nombre),
+                           UNIQUE KEY unique_codigo (codigo),
+                           INDEX idx_nombre (nombre),
+                           FOREIGN KEY (categoria_padre) REFERENCES categoria(id_categoria)
+                               ON DELETE SET NULL
+                               ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- TABLA: EDITORIAL (NUEVA - Normalización)
+-- =====================================================
+DROP TABLE IF EXISTS editorial;
+CREATE TABLE editorial (
+                           id_editorial INT NOT NULL AUTO_INCREMENT,
+                           nombre VARCHAR(100) NOT NULL,
+                           pais VARCHAR(50),
+                           ciudad VARCHAR(50),
+                           telefono VARCHAR(20),
+                           email VARCHAR(100),
+                           sitio_web VARCHAR(200),
+                           activa TINYINT(1) NOT NULL DEFAULT 1,
+
+                           PRIMARY KEY (id_editorial),
+                           UNIQUE KEY unique_nombre (nombre),
+                           INDEX idx_nombre (nombre)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- TABLA: AUTOR
+-- =====================================================
+DROP TABLE IF EXISTS autor;
+CREATE TABLE autor (
+                       id_autor INT NOT NULL AUTO_INCREMENT,
+                       nombre_completo VARCHAR(150) NOT NULL,
+                       nacionalidad VARCHAR(50),
+                       fecha_nacimiento DATE,
+                       fecha_fallecimiento DATE,
+                       biografia TEXT,
+                       premios TEXT,
+
+                       PRIMARY KEY (id_autor),
+                       INDEX idx_nombre (nombre_completo),
+                       INDEX idx_nacionalidad (nacionalidad)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- TABLA: LIBRO
+-- =====================================================
+DROP TABLE IF EXISTS libro;
+CREATE TABLE libro (
+                       id_libro INT NOT NULL AUTO_INCREMENT,
+                       isbn VARCHAR(20) NOT NULL,
+                       titulo VARCHAR(200) NOT NULL,
+    -- Campos para compatibilidad con BD existente
+                       autor VARCHAR(150) NOT NULL COMMENT 'Campo legacy - usar libro_autor',
+                       editorial VARCHAR(100) DEFAULT NULL COMMENT 'Campo legacy - usar id_editorial',
+    -- Campo normalizado (FK a tabla editorial)
+                       id_editorial INT NOT NULL,
+                       año_publicacion INT NOT NULL,
+                       id_categoria INT NOT NULL,
+                       num_paginas INT,
+                       idioma VARCHAR(30) NOT NULL DEFAULT 'Español',
+                       copias_totales INT NOT NULL DEFAULT 1,
+                       copias_disponibles INT NOT NULL DEFAULT 1,
+                       ubicacion VARCHAR(50) NOT NULL,
+                       descripcion TEXT,
+                       portada_url VARCHAR(255),
+                       fecha_adquisicion DATE NOT NULL,
+                       precio DECIMAL(10,2),
+                       estado_fisico ENUM('EXCELENTE', 'BUENO', 'REGULAR', 'MALO') NOT NULL DEFAULT 'BUENO',
+
+                       PRIMARY KEY (id_libro),
+                       UNIQUE KEY unique_isbn (isbn),
+                       INDEX idx_isbn (isbn),
+                       INDEX idx_titulo (titulo),
+                       INDEX idx_autor (autor),
+                       INDEX idx_categoria (id_categoria),
+                       INDEX idx_editorial (id_editorial),
+                       INDEX idx_disponibilidad (copias_disponibles),
+                       FULLTEXT INDEX ft_busqueda (titulo, autor, descripcion),
+
+                       FOREIGN KEY (id_categoria) REFERENCES categoria(id_categoria)
+                           ON DELETE RESTRICT
+                           ON UPDATE CASCADE,
+                       FOREIGN KEY (id_editorial) REFERENCES editorial(id_editorial)
+                           ON DELETE RESTRICT
+                           ON UPDATE CASCADE
+
+    -- MySQL 5.7 NO soporta CHECK constraints, se usarán TRIGGERS
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- TABLA: LIBRO_AUTOR (Relación N:M)
+-- =====================================================
+DROP TABLE IF EXISTS libro_autor;
+CREATE TABLE libro_autor (
+                             id_libro INT NOT NULL,
+                             id_autor INT NOT NULL,
+                             orden INT NOT NULL DEFAULT 1,
+                             rol VARCHAR(50) DEFAULT 'Autor',
+
+                             PRIMARY KEY (id_libro, id_autor),
+
+                             FOREIGN KEY (id_libro) REFERENCES libro(id_libro)
+                                 ON DELETE CASCADE
+                                 ON UPDATE CASCADE,
+                             FOREIGN KEY (id_autor) REFERENCES autor(id_autor)
+                                 ON DELETE CASCADE
+                                 ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- TABLA: PRESTAMO
+-- =====================================================
+DROP TABLE IF EXISTS prestamo;
+CREATE TABLE prestamo (
+                          id_prestamo INT NOT NULL AUTO_INCREMENT,
+                          id_libro INT NOT NULL,
+                          id_usuario INT NOT NULL,
+                          id_bibliotecario INT NOT NULL,
+                          fecha_prestamo DATE NOT NULL,
+                          fecha_devolucion_esperada DATE NOT NULL,
+                          fecha_devolucion_real DATE,
+                          estado ENUM('ACTIVO', 'DEVUELTO', 'VENCIDO', 'RENOVADO') NOT NULL DEFAULT 'ACTIVO',
+                          renovaciones_realizadas INT NOT NULL DEFAULT 0,
+                          max_renovaciones INT NOT NULL DEFAULT 2,
+                          observaciones TEXT,
+
+                          PRIMARY KEY (id_prestamo),
+                          INDEX idx_libro (id_libro),
+                          INDEX idx_usuario (id_usuario),
+                          INDEX idx_bibliotecario (id_bibliotecario),
+                          INDEX idx_estado (estado),
+                          INDEX idx_fecha_prestamo (fecha_prestamo),
+                          INDEX idx_fecha_devolucion (fecha_devolucion_esperada),
+
+                          FOREIGN KEY (id_libro) REFERENCES libro(id_libro)
+                              ON DELETE RESTRICT
+                              ON UPDATE CASCADE,
+                          FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario)
+                              ON DELETE RESTRICT
+                              ON UPDATE CASCADE,
+                          FOREIGN KEY (id_bibliotecario) REFERENCES usuario(id_usuario)
+                              ON DELETE RESTRICT
+                              ON UPDATE CASCADE
+
+    -- CHECK constraints simulados con TRIGGERS
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- TABLA: MULTA
+-- =====================================================
+DROP TABLE IF EXISTS multa;
+CREATE TABLE multa (
+                       id_multa INT NOT NULL AUTO_INCREMENT,
+                       id_prestamo INT NOT NULL,
+                       monto DECIMAL(10,2) NOT NULL,
+                       monto_por_dia DECIMAL(10,2) NOT NULL DEFAULT 10.00,
+                       dias_retraso INT NOT NULL,
+                       fecha_generacion DATE NOT NULL,
+                       fecha_pago DATE,
+                       metodo_pago ENUM('EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'OTRO'),
+                       estado ENUM('PENDIENTE', 'PAGADA', 'CONDONADA') NOT NULL DEFAULT 'PENDIENTE',
+                       id_usuario_recibe_pago INT,
+                       observaciones TEXT,
+
+                       PRIMARY KEY (id_multa),
+                       INDEX idx_prestamo (id_prestamo),
+                       INDEX idx_estado (estado),
+                       INDEX idx_fecha_generacion (fecha_generacion),
+
+                       FOREIGN KEY (id_prestamo) REFERENCES prestamo(id_prestamo)
+                           ON DELETE RESTRICT
+                           ON UPDATE CASCADE,
+                       FOREIGN KEY (id_usuario_recibe_pago) REFERENCES usuario(id_usuario)
+                           ON DELETE SET NULL
+                           ON UPDATE CASCADE
+
+    -- CHECK constraints simulados con TRIGGERS
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- TABLA: RESERVA
+-- =====================================================
+DROP TABLE IF EXISTS reserva;
+CREATE TABLE reserva (
+                         id_reserva INT NOT NULL AUTO_INCREMENT,
+                         id_libro INT NOT NULL,
+                         id_usuario INT NOT NULL,
+                         fecha_reserva DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                         fecha_vencimiento DATE NOT NULL,
+                         estado ENUM('PENDIENTE', 'DISPONIBLE', 'RECOGIDA', 'CANCELADA', 'VENCIDA') NOT NULL DEFAULT 'PENDIENTE',
+                         fecha_notificacion DATETIME,
+                         prioridad INT NOT NULL DEFAULT 0,
+                         observaciones TEXT,
+
+                         PRIMARY KEY (id_reserva),
+                         INDEX idx_libro (id_libro),
+                         INDEX idx_usuario (id_usuario),
+                         INDEX idx_estado (estado),
+                         INDEX idx_prioridad (prioridad),
+                         INDEX idx_fecha_reserva (fecha_reserva),
+
+                         FOREIGN KEY (id_libro) REFERENCES libro(id_libro)
+                             ON DELETE CASCADE
+                             ON UPDATE CASCADE,
+                         FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario)
+                             ON DELETE CASCADE
+                             ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- TABLA: AUDITORIA (Opcional)
+-- =====================================================
+DROP TABLE IF EXISTS auditoria;
+CREATE TABLE auditoria (
+                           id_auditoria INT NOT NULL AUTO_INCREMENT,
+                           id_usuario INT NOT NULL,
+                           accion VARCHAR(100) NOT NULL,
+                           tabla_afectada VARCHAR(50) NOT NULL,
+                           id_registro INT NOT NULL,
+                           fecha_hora DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                           ip_address VARCHAR(45),
+                           detalles TEXT,
+
+                           PRIMARY KEY (id_auditoria),
+                           INDEX idx_usuario (id_usuario),
+                           INDEX idx_fecha_hora (fecha_hora),
+                           INDEX idx_tabla (tabla_afectada),
+
+                           FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario)
+                               ON DELETE RESTRICT
+                               ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- TABLA: CONFIGURACION (Opcional)
+-- =====================================================
+DROP TABLE IF EXISTS configuracion;
+CREATE TABLE configuracion (
+                               id_config INT NOT NULL AUTO_INCREMENT,
+                               clave VARCHAR(50) NOT NULL,
+                               valor VARCHAR(255) NOT NULL,
+                               descripcion TEXT,
+                               tipo_dato ENUM('STRING', 'INT', 'DECIMAL', 'BOOLEAN', 'DATE') NOT NULL,
+
+                               PRIMARY KEY (id_config),
+                               UNIQUE KEY unique_clave (clave)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- ÍNDICES ADICIONALES PARA MEJOR RENDIMIENTO
+-- =====================================================
+ALTER TABLE libro ADD INDEX idx_año_publicacion (año_publicacion);
+ALTER TABLE libro ADD INDEX idx_estado_fisico (estado_fisico);
+ALTER TABLE libro ADD INDEX idx_fecha_adquisicion (fecha_adquisicion);
+ALTER TABLE usuario ADD INDEX idx_fecha_registro (fecha_registro);
+ALTER TABLE prestamo ADD INDEX idx_fecha_real (fecha_devolucion_real);
+ALTER TABLE multa ADD INDEX idx_fecha_pago (fecha_pago);
+ALTER TABLE reserva ADD INDEX idx_fecha_vencimiento (fecha_vencimiento);
+
+-- =====================================================
+-- DATOS INICIALES - CONFIGURACION
+-- =====================================================
+INSERT INTO configuracion (clave, valor, descripcion, tipo_dato) VALUES
+                                                                     ('dias_prestamo', '14', 'Días de duración de un préstamo', 'INT'),
+                                                                     ('multa_por_dia', '10.00', 'Monto de multa por día de retraso', 'DECIMAL'),
+                                                                     ('max_renovaciones', '2', 'Número máximo de renovaciones permitidas', 'INT'),
+                                                                     ('max_prestamos_simultaneos', '3', 'Cantidad máxima de préstamos activos por usuario', 'INT'),
+                                                                     ('dias_reserva_vigente', '3', 'Días para recoger una reserva antes de expirar', 'INT'),
+                                                                     ('nombre_biblioteca', 'Biblioteca Central', 'Nombre de la institución', 'STRING'),
+                                                                     ('email_notificaciones', 'notificaciones@biblioteca.com', 'Email para enviar notificaciones', 'STRING'),
+                                                                     ('dias_moroso_suspension', '30', 'Días de mora para suspensión de usuario', 'INT'),
+                                                                     ('max_dias_prestamo_vip', '21', 'Días de préstamo para usuarios VIP', 'INT'),
+                                                                     ('porcentaje_descuento_multas', '0.10', 'Porcentaje de descuento por pago anticipado', 'DECIMAL');
+
+-- =====================================================
+-- DATOS INICIALES - CATEGORIAS
+-- =====================================================
+INSERT INTO categoria (nombre, descripcion, codigo) VALUES
+                                                        ('Ficción', 'Novelas y literatura de ficción', 'FIC'),
+                                                        ('No Ficción', 'Libros basados en hechos reales', 'NFIC'),
+                                                        ('Ciencia', 'Libros científicos y técnicos', 'CIE'),
+                                                        ('Historia', 'Libros de historia y biografías', 'HIST'),
+                                                        ('Tecnología', 'Libros sobre informática y tecnología', 'TEC'),
+                                                        ('Literatura Infantil', 'Libros para niños y jóvenes', 'INF'),
+                                                        ('Autoayuda', 'Libros de desarrollo personal', 'AUTO'),
+                                                        ('Filosofía', 'Libros de pensamiento filosófico', 'FIL'),
+                                                        ('Arte', 'Libros sobre arte y cultura', 'ART'),
+                                                        ('Referencia', 'Diccionarios, enciclopedias y manuales', 'REF'),
+                                                        ('Poesía', 'Libros de poesía y verso', 'POE'),
+                                                        ('Teatro', 'Obras de teatro y dramaturgia', 'TEA'),
+                                                        ('Ciencia Ficción', 'Novelas de ciencia ficción', 'CF'),
+                                                        ('Fantástico', 'Literatura fantástica', 'FAN'),
+                                                        ('Policial', 'Novelas policíacas y de misterio', 'POL'),
+                                                        ('Romántica', 'Novelas románticas', 'ROM'),
+                                                        ('Aventuras', 'Libros de aventuras', 'AVEN'),
+                                                        ('Ensayo', 'Ensayos literarios y científicos', 'ENS'),
+                                                        ('Cocina', 'Libros de cocina y gastronomía', 'COC'),
+                                                        ('Salud', 'Libros de salud y bienestar', 'SAL');
+
+-- =====================================================
+-- DATOS INICIALES - EDITORIALES
+-- =====================================================
+INSERT INTO editorial (nombre, pais, ciudad, telefono, email, activa) VALUES
+                                                                          ('Planeta', 'España', 'Barcelona', '+34 93 496 70 00', 'info@planeta.es', 1),
+                                                                          ('Penguin Random House', 'Estados Unidos', 'Nueva York', '+1 212-782-9000', 'contact@prh.com', 1),
+                                                                          ('Santillana', 'España', 'Madrid', '+34 91 398 47 00', 'santillana@santillana.com', 1),
+                                                                          ('Sudamericana', 'Argentina', 'Buenos Aires', '+54 11 4313 2400', 'info@sudamericana.com.ar', 1),
+                                                                          ('Alfaguara', 'España', 'Madrid', '+34 91 398 47 00', 'alfaguara@alfaguara.com', 1),
+                                                                          ('Anagrama', 'España', 'Barcelona', '+34 93 217 71 71', 'info@anagrama-ed.es', 1),
+                                                                          ('Tusquets', 'España', 'Barcelona', '+34 93 218 88 88', 'info@tusquetseditores.com', 1),
+                                                                          ('Debolsillo', 'España', 'Barcelona', '+34 93 496 70 00', 'debolsillo@planeta.es', 1),
+                                                                          ('Alianza Editorial', 'España', 'Madrid', '+34 91 308 00 00', 'info@alianzaeditorial.es', 1),
+                                                                          ('Ediciones B', 'España', 'Barcelona', '+34 93 496 70 00', 'edicionesb@edicionesb.com', 1),
+                                                                          ('Seix Barral', 'España', 'Barcelona', '+34 93 496 70 00', 'seixbarral@planeta.es', 1),
+                                                                          ('Lumen', 'España', 'Barcelona', '+34 93 496 70 00', 'lumen@planeta.es', 1),
+                                                                          ('Austral', 'España', 'Madrid', '+34 91 398 47 00', 'austral@austral.com', 1),
+                                                                          ('Espasa Calpe', 'España', 'Madrid', '+34 91 398 47 00', 'espasa@espasa.com', 1),
+                                                                          ('Siruela', 'España', 'Madrid', '+34 91 702 20 45', 'info@siruela.com', 1);
+
+-- =====================================================
+-- DATOS INICIALES - AUTORES
+-- =====================================================
+INSERT INTO autor (nombre_completo, nacionalidad, fecha_nacimiento, fecha_fallecimiento, biografia, premios) VALUES
+                                                                                                                 ('Gabriel García Márquez', 'Colombia', '1927-03-06', '2014-04-17', 'Escritor y periodista colombiano. Una de las figuras más importantes de la literatura universal del siglo XX.', 'Premio Nobel de Literatura 1982'),
+                                                                                                                 ('Mario Vargas Llosa', 'Perú', '1936-03-28', NULL, 'Escritor peruano. Uno de los más importantes novelistas y ensayistas contemporáneos.', 'Premio Nobel de Literatura 2010'),
+                                                                                                                 ('Isabel Allende', 'Chile', '1942-08-02', NULL, 'Escritora chilena. Una de las autoras más leídas del mundo en idioma español.', 'Premio Nacional de Literatura Chile 2010'),
+                                                                                                                 ('Jorge Luis Borges', 'Argentina', '1899-08-24', '1986-06-14', 'Escritor argentino, uno de los autores más destacados de la literatura del siglo XX.', 'Premio Cervantes 1979'),
+                                                                                                                 ('Miguel de Cervantes', 'España', '1547-09-29', '1616-04-22', 'Novelista, poeta, dramaturgo y soldado español. Autor de Don Quijote de la Mancha.', 'Considerado la máxima figura de la literatura española'),
+                                                                                                                 ('Pablo Neruda', 'Chile', '1904-07-12', '1973-09-23', 'Poeta chileno, considerado entre los mejores y más influyentes artistas de su siglo.', 'Premio Nobel de Literatura 1971'),
+                                                                                                                 ('Octavio Paz', 'México', '1914-03-31', '1998-04-19', 'Poeta, ensayista y diplomático mexicano. Premio Nobel de Literatura.', 'Premio Nobel de Literatura 1990'),
+                                                                                                                 ('Julio Cortázar', 'Argentina', '1914-08-26', '1984-02-12', 'Escritor, traductor e intelectual argentino. Una de las figuras clave del boom latinoamericano.', 'Premio Nacional de Literatura Argentina'),
+                                                                                                                 ('Carlos Fuentes', 'México', '1928-11-11', '2012-05-15', 'Escritor, intelectual y diplomático mexicano. Una de las figuras más importantes de la literatura iberoamericana.', 'Premio Cervantes 1987'),
+                                                                                                                 ('Juan Rulfo', 'México', '1917-05-16', '1986-01-07', 'Escritor, guionista y fotógrafo mexicano. Autor de Pedro Páramo y El Llano en llamas.', 'Premio Nacional de Literatura México 1970'),
+                                                                                                                 ('Laura Esquivel', 'México', '1950-09-30', NULL, 'Escritora mexicana, autora de "Como agua para chocolate".', 'Premio ABBY 1994'),
+                                                                                                                 ('Arturo Pérez-Reverte', 'España', '1951-11-25', NULL, 'Escritor y periodista español, autor de "El capitán Alatriste".', 'Premio planeta 1993'),
+                                                                                                                 ('Almudena Grandes', 'España', '1960-05-07', '2021-11-27', 'Escritora española, una de las voces más importantes de la narrativa contemporánea.', 'Premio Nacional de Narrativa 2018'),
+                                                                                                                 ('Javier Marías', 'España', '1951-09-20', NULL, 'Escritor, traductor y editor español.', 'Premio Nacional de Traducción 1979'),
+                                                                                                                 ('Rosa Montero', 'España', '1951-01-03', NULL, 'Periodista y escritora española.', 'Premio Nacional de Periodismo 1980'),
+                                                                                                                 ('Antonio Muñoz Molina', 'España', '1956-01-10', NULL, 'Escritor español, miembro de la Real Academia Española.', 'Premio Príncipe de Asturias 2013'),
+                                                                                                                 ('Eduardo Mendoza', 'España', '1943-01-11', NULL, 'Escritor español, autor de "La ciudad de los prodigios".', 'Premio Planeta 2010'),
+                                                                                                                 ('Manuel Rivas', 'España', '1957-10-24', NULL, 'Escritor, poeta, ensayista y periodista español en lengua gallega.', 'Premio Nacional de Narrativa 1996'),
+                                                                                                                 ('Carmen Laforet', 'España', '1921-09-06', '2004-02-28', 'Escritora española, autora de "Nada".', 'Premio Nadal 1944'),
+                                                                                                                 ('Miguel Delibes', 'España', '1920-10-17', '2010-03-12', 'Novelista español, miembro de la Real Academia Española.', 'Premio Cervantes 1993');
+
+-- =====================================================
+-- DATOS INICIALES - LIBROS
+-- =====================================================
+INSERT INTO libro (isbn, titulo, autor, editorial, id_editorial, año_publicacion, id_categoria,
+                   num_paginas, idioma, copias_totales, copias_disponibles, ubicacion,
+                   descripcion, portada_url, fecha_adquisicion, precio, estado_fisico) VALUES
+
+                                                                                           ('978-0307474728', 'Cien años de soledad', 'Gabriel García Márquez', 'Sudamericana', 4, 1967, 1,
+                                                                                            471, 'Español', 5, 5, 'A-01-15',
+                                                                                            'Una de las obras más importantes de la literatura hispanoamericana del siglo XX. Narra la historia de la familia Buendía a lo largo de siete generaciones en el pueblo ficticio de Macondo.',
+                                                                                            'https://ejemplo.com/portadas/cien-anos-soledad.jpg',
+                                                                                            '2024-01-15', 350.00, 'EXCELENTE'),
+
+                                                                                           ('978-8420412146', 'Don Quijote de la Mancha', 'Miguel de Cervantes', 'Penguin Random House', 2, 1605, 1,
+                                                                                            863, 'Español', 3, 3, 'A-01-01',
+                                                                                            'La obra cumbre de la literatura española y una de las más destacadas de la literatura universal. Narra las aventuras de Don Quijote y su escudero Sancho Panza.',
+                                                                                            'https://ejemplo.com/portadas/quijote.jpg',
+                                                                                            '2024-01-15', 450.00, 'BUENO'),
+
+                                                                                           ('978-0060883287', 'La casa de los espíritus', 'Isabel Allende', 'Planeta', 1, 1982, 1,
+                                                                                            433, 'Español', 4, 4, 'A-02-08',
+                                                                                            'Primera novela de Isabel Allende. Narra la historia de la familia Trueba a lo largo de cuatro generaciones en Chile.',
+                                                                                            'https://ejemplo.com/portadas/casa-espiritus.jpg',
+                                                                                            '2024-02-01', 320.00, 'EXCELENTE'),
+
+                                                                                           ('978-8420633169', 'Rayuela', 'Julio Cortázar', 'Alfaguara', 5, 1963, 1,
+                                                                                            635, 'Español', 2, 2, 'A-02-15',
+                                                                                            'Una de las grandes novelas del boom latinoamericano. Obra experimental que puede leerse de múltiples formas.',
+                                                                                            'https://ejemplo.com/portadas/rayuela.jpg',
+                                                                                            '2024-02-10', 380.00, 'BUENO'),
+
+                                                                                           ('978-8437604947', 'Pedro Páramo', 'Juan Rulfo', 'Santillana', 3, 1955, 1,
+                                                                                            142, 'Español', 3, 3, 'A-03-05',
+                                                                                            'Obra maestra de la literatura mexicana. Novela corta que narra la historia de Juan Preciado y su búsqueda de su padre en Comala.',
+                                                                                            'https://ejemplo.com/portadas/pedro-paramo.jpg',
+                                                                                            '2024-03-01', 250.00, 'EXCELENTE'),
+
+                                                                                           ('978-8420608495', 'Ficciones', 'Jorge Luis Borges', 'Alianza Editorial', 9, 1944, 1,
+                                                                                            174, 'Español', 4, 4, 'A-03-12',
+                                                                                            'Colección de cuentos del maestro argentino. Incluye relatos fundamentales como "El jardín de senderos que se bifurcan" y "La biblioteca de Babel".',
+                                                                                            'https://ejemplo.com/portadas/ficciones.jpg',
+                                                                                            '2024-03-15', 280.00, 'EXCELENTE'),
+
+                                                                                           ('978-8437620459', 'Veinte poemas de amor y una canción desesperada', 'Pablo Neruda', 'Debolsillo', 8, 1924, 11,
+                                                                                            128, 'Español', 5, 5, 'B-01-05',
+                                                                                            'Una de las obras más conocidas de Pablo Neruda. Colección de poemas de amor juvenil.',
+                                                                                            'https://ejemplo.com/portadas/20-poemas.jpg',
+                                                                                            '2024-04-01', 180.00, 'BUENO'),
+
+                                                                                           ('978-8433905109', 'El laberinto de la soledad', 'Octavio Paz', 'Anagrama', 6, 1950, 8,
+                                                                                            192, 'Español', 3, 3, 'C-02-08',
+                                                                                            'Ensayo sobre la identidad mexicana. Una de las obras más importantes del pensamiento latinoamericano.',
+                                                                                            'https://ejemplo.com/portadas/laberinto-soledad.jpg',
+                                                                                            '2024-04-10', 290.00, 'EXCELENTE'),
+
+                                                                                           ('978-8466306545', 'Como agua para chocolate', 'Laura Esquivel', 'Tusquets', 7, 1989, 1,
+                                                                                            256, 'Español', 4, 4, 'A-04-07',
+                                                                                            'Novela que combina romance y realismo mágico, ambientada en la Revolución Mexicana.',
+                                                                                            'https://ejemplo.com/portadas/agua-chocolate.jpg',
+                                                                                            '2024-04-20', 300.00, 'EXCELENTE'),
+
+                                                                                           ('978-8423348267', 'El capitán Alatriste', 'Arturo Pérez-Reverte', 'Alfaguara', 5, 1996, 16,
+                                                                                            352, 'Español', 3, 3, 'B-02-11',
+                                                                                            'Primera novela de la serie de aventuras del capitán Alatriste, ambientada en el siglo XVII español.',
+                                                                                            'https://ejemplo.com/portadas/alatriste.jpg',
+                                                                                            '2024-05-01', 310.00, 'BUENO'),
+
+                                                                                           ('978-8498389257', 'Los pacientes del doctor García', 'Almudena Grandes', 'Tusquets', 7, 2017, 4,
+                                                                                            736, 'Español', 2, 2, 'C-03-05',
+                                                                                            'Novela histórica que forma parte de la serie "Episodios de una guerra interminable".',
+                                                                                            'https://ejemplo.com/portadas/pacientes-garcia.jpg',
+                                                                                            '2024-05-10', 420.00, 'EXCELENTE'),
+
+                                                                                           ('978-8433968760', 'Corazón tan blanco', 'Javier Marías', 'Anagrama', 6, 1992, 1,
+                                                                                            304, 'Español', 3, 3, 'A-05-03',
+                                                                                            'Novela que explora temas como el secreto, el matrimonio y la identidad.',
+                                                                                            'https://ejemplo.com/portadas/corazon-blanco.jpg',
+                                                                                            '2024-05-15', 290.00, 'BUENO'),
+
+                                                                                           ('978-8466345704', 'La ridícula idea de no volver a verte', 'Rosa Montero', 'Seix Barral', 11, 2013, 7,
+                                                                                            224, 'Español', 4, 4, 'C-04-09',
+                                                                                            'Ensayo novelado sobre la superación del duelo, inspirado en Marie Curie.',
+                                                                                            'https://ejemplo.com/portadas/ridicula-idea.jpg',
+                                                                                            '2024-05-20', 240.00, 'EXCELENTE'),
+
+                                                                                           ('978-8466347845', 'El jinete polaco', 'Antonio Muñoz Molina', 'Seix Barral', 11, 1991, 1,
+                                                                                            528, 'Español', 2, 2, 'B-03-08',
+                                                                                            'Novela que entrelaza historias del pasado y el presente en un pueblo andaluz.',
+                                                                                            'https://ejemplo.com/portadas/jinete-polaco.jpg',
+                                                                                            '2024-05-25', 350.00, 'BUENO'),
+
+                                                                                           ('978-8408121146', 'El asombroso viaje de Pomponio Flato', 'Eduardo Mendoza', 'Seix Barral', 11, 2008, 15,
+                                                                                            176, 'Español', 3, 3, 'A-06-12',
+                                                                                            'Novela cómica que parodia las novelas históricas y policíacas.',
+                                                                                            'https://ejemplo.com/portadas/pomponio-flato.jpg',
+                                                                                            '2024-06-01', 220.00, 'BUENO'),
+
+                                                                                           ('978-8420444192', 'El lápiz del carpintero', 'Manuel Rivas', 'Alfaguara', 5, 1998, 1,
+                                                                                            192, 'Español', 4, 4, 'C-05-04',
+                                                                                            'Historia de amor ambientada en la Guerra Civil española.',
+                                                                                            'https://ejemplo.com/portadas/lapiz-carpintero.jpg',
+                                                                                            '2024-06-05', 260.00, 'EXCELENTE'),
+
+                                                                                           ('978-8423349448', 'Nada', 'Carmen Laforet', 'Austral', 13, 1945, 1,
+                                                                                            224, 'Español', 5, 5, 'A-07-06',
+                                                                                            'Novela que retrata la Barcelona de la posguerra a través de los ojos de una joven.',
+                                                                                            'https://ejemplo.com/portadas/nada.jpg',
+                                                                                            '2024-06-10', 200.00, 'EXCELENTE'),
+
+                                                                                           ('978-8420674025', 'El hereje', 'Miguel Delibes', 'Austral', 13, 1998, 4,
+                                                                                            464, 'Español', 3, 3, 'B-04-02',
+                                                                                            'Novela histórica ambientada en la Valladolid del siglo XVI durante la Reforma protestante.',
+                                                                                            'https://ejemplo.com/portadas/hereje.jpg',
+                                                                                            '2024-06-15', 320.00, 'BUENO'),
+
+                                                                                           ('978-8466341331', 'Sapiens: De animales a dioses', 'Yuval Noah Harari', 'Debate', 8, 2011, 2,
+                                                                                            496, 'Español', 4, 4, 'D-01-03',
+                                                                                            'Breve historia de la humanidad que abarca desde la evolución hasta la actualidad.',
+                                                                                            'https://ejemplo.com/portadas/sapiens.jpg',
+                                                                                            '2024-06-20', 390.00, 'EXCELENTE'),
+
+                                                                                           ('978-8408095300', 'El silmarillion', 'J.R.R. Tolkien', 'Minotauro', 1, 1977, 14,
+                                                                                            480, 'Español', 2, 2, 'E-01-08',
+                                                                                            'Obra que narra la historia de la Tierra Media desde su creación.',
+                                                                                            'https://ejemplo.com/portadas/silmarillion.jpg',
+                                                                                            '2024-06-25', 410.00, 'EXCELENTE');
+
+-- =====================================================
+-- RELACIONAR LIBROS CON AUTORES (libro_autor)
+-- =====================================================
+INSERT INTO libro_autor (id_libro, id_autor, orden, rol) VALUES
+                                                             (1, 1, 1, 'Autor'),      -- Cien años de soledad - García Márquez
+                                                             (2, 5, 1, 'Autor'),      -- Don Quijote - Cervantes
+                                                             (3, 3, 1, 'Autor'),      -- La casa de los espíritus - Isabel Allende
+                                                             (4, 8, 1, 'Autor'),      -- Rayuela - Cortázar
+                                                             (5, 10, 1, 'Autor'),     -- Pedro Páramo - Juan Rulfo
+                                                             (6, 4, 1, 'Autor'),      -- Ficciones - Borges
+                                                             (7, 6, 1, 'Autor'),      -- Veinte poemas - Neruda
+                                                             (8, 7, 1, 'Autor'),      -- El laberinto - Octavio Paz
+                                                             (9, 11, 1, 'Autor'),     -- Como agua para chocolate - Laura Esquivel
+                                                             (10, 12, 1, 'Autor'),    -- El capitán Alatriste - Pérez-Reverte
+                                                             (11, 13, 1, 'Autor'),    -- Los pacientes del doctor García - Almudena Grandes
+                                                             (12, 14, 1, 'Autor'),    -- Corazón tan blanco - Javier Marías
+                                                             (13, 15, 1, 'Autor'),    -- La ridícula idea - Rosa Montero
+                                                             (14, 16, 1, 'Autor'),    -- El jinete polaco - Antonio Muñoz Molina
+                                                             (15, 17, 1, 'Autor'),    -- El asombroso viaje - Eduardo Mendoza
+                                                             (16, 18, 1, 'Autor'),    -- El lápiz del carpintero - Manuel Rivas
+                                                             (17, 19, 1, 'Autor'),    -- Nada - Carmen Laforet
+                                                             (18, 20, 1, 'Autor');    -- El hereje - Miguel Delibes
+
+-- =====================================================
+-- USUARIOS DEL SISTEMA
+-- =====================================================
+-- Contraseña: admin123 (hash SHA-256)
+INSERT INTO usuario (dni, nombre, email, telefono, direccion, tipo_usuario, password_hash, estado) VALUES
+                                                                                                       ('00000000', 'Administrador del Sistema', 'admin@biblioteca.com', '555-0000', 'Biblioteca Central, Oficina 101', 'ADMIN',
+                                                                                                        '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 'ACTIVO'),
+
+                                                                                                       ('12345678', 'Juan Pérez Bibliotecario', 'juan.perez@biblioteca.com', '555-0001', 'Biblioteca Central, Sección Préstamos', 'BIBLIOTECARIO',
+                                                                                                        '9af15b336e6a9619928537df30b2e6a2376569fcf9d7e773eccede65606529a0', 'ACTIVO'),
+
+                                                                                                       ('87654321', 'María García Bibliotecaria', 'maria.garcia@biblioteca.com', '555-0002', 'Biblioteca Central, Sección Referencia', 'BIBLIOTECARIO',
+                                                                                                        '9af15b336e6a9619928537df30b2e6a2376569fcf9d7e773eccede65606529a0', 'ACTIVO'),
+
+                                                                                                       ('11111111', 'Carlos López Lector', 'carlos.lopez@email.com', '555-1001', 'Calle Principal 123, Ciudad', 'LECTOR',
+                                                                                                        '1a30f0e12da0e85e8c40eb9c5b7c0c0ea0c0a0c0c0c0c0c0c0c0c0c0c0c0c0c0', 'ACTIVO'),
+
+                                                                                                       ('22222222', 'Ana Martínez Lectora', 'ana.martinez@email.com', '555-1002', 'Avenida Central 456, Ciudad', 'LECTOR',
+                                                                                                        '1a30f0e12da0e85e8c40eb9c5b7c0c0ea0c0a0c0c0c0c0c0c0c0c0c0c0c0c0c0', 'ACTIVO'),
+
+                                                                                                       ('33333333', 'Roberto Sánchez Lector', 'roberto.sanchez@email.com', '555-1003', 'Plaza Mayor 789, Ciudad', 'LECTOR',
+                                                                                                        '1a30f0e12da0e85e8c40eb9c5b7c0c0ea0c0a0c0c0c0c0c0c0c0c0c0c0c0c0c0', 'ACTIVO'),
+
+                                                                                                       ('44444444', 'Luisa Fernández Lectora', 'luisa.fernandez@email.com', '555-1004', 'Calle Nueva 321, Ciudad', 'LECTOR',
+                                                                                                        '1a30f0e12da0e85e8c40eb9c5b7c0c0ea0c0a0c0c0c0c0c0c0c0c0c0c0c0c0c0', 'ACTIVO'),
+
+                                                                                                       ('55555555', 'Pedro Gómez Lector', 'pedro.gomez@email.com', '555-1005', 'Boulevard 654, Ciudad', 'LECTOR',
+                                                                                                        '1a30f0e12da0e85e8c40eb9c5b7c0c0ea0c0a0c0c0c0c0c0c0c0c0c0c0c0c0c0', 'MOROSO'),
+
+                                                                                                       ('66666666', 'Sofía Rodríguez Lectora', 'sofia.rodriguez@email.com', '555-1006', 'Paseo del Río 987, Ciudad', 'LECTOR',
+                                                                                                        '1a30f0e12da0e85e8c40eb9c5b7c0c0ea0c0a0c0c0c0c0c0c0c0c0c0c0c0c0c0', 'SUSPENDIDO'),
+
+                                                                                                       ('77777777', 'David Torres Lector', 'david.torres@email.com', '555-1007', 'Avenida Libertad 147, Ciudad', 'LECTOR',
+                                                                                                        '1a30f0e12da0e85e8c40eb9c5b7c0c0ea0c0a0c0c0c0c0c0c0c0c0c0c0c0c0c0', 'INACTIVO');
+
+-- =====================================================
+-- TRIGGERS PARA VALIDACIONES (Reemplazan CHECK constraints)
+-- =====================================================
+
+DELIMITER $$
+
+-- TRIGGER 1: Validar copias en LIBRO (INSERT)
+DROP TRIGGER IF EXISTS tr_libro_validar_insert$$
+CREATE TRIGGER tr_libro_validar_insert
+    BEFORE INSERT ON libro
+    FOR EACH ROW
+BEGIN
+    IF NEW.copias_disponibles > NEW.copias_totales THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: copias_disponibles no puede ser mayor que copias_totales';
+    END IF;
+
+    IF NEW.copias_disponibles < 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: copias_disponibles no puede ser negativo';
+    END IF;
+
+    IF NEW.año_publicacion > YEAR(CURDATE()) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: año_publicacion no puede ser futuro';
+    END IF;
+END$$
+
+-- TRIGGER 2: Validar copias en LIBRO (UPDATE)
+DROP TRIGGER IF EXISTS tr_libro_validar_update$$
+CREATE TRIGGER tr_libro_validar_update
+    BEFORE UPDATE ON libro
+    FOR EACH ROW
+BEGIN
+    IF NEW.copias_disponibles > NEW.copias_totales THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: copias_disponibles no puede ser mayor que copias_totales';
+    END IF;
+
+    IF NEW.copias_disponibles < 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: copias_disponibles no puede ser negativo';
+    END IF;
+
+    IF NEW.año_publicacion > YEAR(CURDATE()) THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: año_publicacion no puede ser futuro';
+    END IF;
+END$$
+
+-- TRIGGER 3: Validar fechas en PRESTAMO (INSERT)
+DROP TRIGGER IF EXISTS tr_prestamo_validar_insert$$
+CREATE TRIGGER tr_prestamo_validar_insert
+    BEFORE INSERT ON prestamo
+    FOR EACH ROW
+BEGIN
+    IF NEW.fecha_devolucion_esperada <= NEW.fecha_prestamo THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: fecha_devolucion_esperada debe ser posterior a fecha_prestamo';
+    END IF;
+
+    IF NEW.fecha_devolucion_real IS NOT NULL AND NEW.fecha_devolucion_real < NEW.fecha_prestamo THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: fecha_devolucion_real no puede ser anterior a fecha_prestamo';
+    END IF;
+
+    IF NEW.renovaciones_realizadas > NEW.max_renovaciones THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: renovaciones_realizadas supera el máximo permitido';
+    END IF;
+END$$
+
+-- TRIGGER 4: Validar fechas en PRESTAMO (UPDATE)
+DROP TRIGGER IF EXISTS tr_prestamo_validar_update$$
+CREATE TRIGGER tr_prestamo_validar_update
+    BEFORE UPDATE ON prestamo
+    FOR EACH ROW
+BEGIN
+    IF NEW.fecha_devolucion_esperada <= NEW.fecha_prestamo THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: fecha_devolucion_esperada debe ser posterior a fecha_prestamo';
+    END IF;
+
+    IF NEW.fecha_devolucion_real IS NOT NULL AND NEW.fecha_devolucion_real < NEW.fecha_prestamo THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: fecha_devolucion_real no puede ser anterior a fecha_prestamo';
+    END IF;
+
+    IF NEW.renovaciones_realizadas > NEW.max_renovaciones THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: renovaciones_realizadas supera el máximo permitido';
+    END IF;
+END$$
+
+-- TRIGGER 5: Validar MULTA (INSERT)
+DROP TRIGGER IF EXISTS tr_multa_validar_insert$$
+CREATE TRIGGER tr_multa_validar_insert
+    BEFORE INSERT ON multa
+    FOR EACH ROW
+BEGIN
+    IF NEW.monto <= 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: el monto debe ser positivo';
+    END IF;
+
+    IF NEW.dias_retraso <= 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: dias_retraso debe ser positivo';
+    END IF;
+
+    IF NEW.fecha_pago IS NOT NULL AND NEW.fecha_pago < NEW.fecha_generacion THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: fecha_pago no puede ser anterior a fecha_generacion';
+    END IF;
+END$$
+
+-- TRIGGER 6: Validar MULTA (UPDATE)
+DROP TRIGGER IF EXISTS tr_multa_validar_update$$
+CREATE TRIGGER tr_multa_validar_update
+    BEFORE UPDATE ON multa
+    FOR EACH ROW
+BEGIN
+    IF NEW.monto <= 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: el monto debe ser positivo';
+    END IF;
+
+    IF NEW.dias_retraso <= 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: dias_retraso debe ser positivo';
+    END IF;
+
+    IF NEW.fecha_pago IS NOT NULL AND NEW.fecha_pago < NEW.fecha_generacion THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Error: fecha_pago no puede ser anterior a fecha_generacion';
+    END IF;
+END$$
+
+-- TRIGGER 7: Actualizar copias disponibles al crear préstamo
+DROP TRIGGER IF EXISTS tr_actualizar_copias_prestamo_insert$$
+CREATE TRIGGER tr_actualizar_copias_prestamo_insert
+    AFTER INSERT ON prestamo
+    FOR EACH ROW
+BEGIN
+    IF NEW.estado = 'ACTIVO' THEN
+        UPDATE libro
+        SET copias_disponibles = copias_disponibles - 1
+        WHERE id_libro = NEW.id_libro;
+    END IF;
+END$$
+
+-- TRIGGER 8: Actualizar copias disponibles al devolver libro
+DROP TRIGGER IF EXISTS tr_actualizar_copias_prestamo_update$$
+CREATE TRIGGER tr_actualizar_copias_prestamo_update
+    AFTER UPDATE ON prestamo
+    FOR EACH ROW
+BEGIN
+    IF NEW.estado = 'DEVUELTO' AND OLD.estado != 'DEVUELTO' THEN
+        UPDATE libro
+        SET copias_disponibles = copias_disponibles + 1
+        WHERE id_libro = NEW.id_libro;
+    END IF;
+END$$
+
+-- TRIGGER 9: Actualizar fecha_ultima_actividad de usuario
+DROP TRIGGER IF EXISTS tr_actualizar_actividad_usuario$$
+CREATE TRIGGER tr_actualizar_actividad_usuario
+    AFTER INSERT ON prestamo
+    FOR EACH ROW
+BEGIN
+    UPDATE usuario
+    SET fecha_ultima_actividad = NOW()
+    WHERE id_usuario = NEW.id_usuario;
+END$$
+
+DELIMITER ;
+
+-- =====================================================
+-- VISTAS ÚTILES PARA CONSULTAS
+-- =====================================================
+
+-- Vista 1: Libros disponibles para préstamo
+CREATE OR REPLACE VIEW v_libros_disponibles AS
+SELECT
+    l.id_libro, l.isbn, l.titulo, l.autor, e.nombre as editorial,
+    c.nombre as categoria, l.copias_disponibles, l.ubicacion,
+    l.estado_fisico, l.idioma, l.año_publicacion
+FROM libro l
+         INNER JOIN editorial e ON l.id_editorial = e.id_editorial
+         INNER JOIN categoria c ON l.id_categoria = c.id_categoria
+WHERE l.copias_disponibles > 0
+  AND c.activa = 1
+  AND e.activa = 1
+ORDER BY l.titulo;
+
+DELIMITER $$
+
+-- Vista 2: Préstamos activos con información detallada
+CREATE OR REPLACE VIEW v_prestamos_activos AS
+SELECT
+    p.id_prestamo, l.titulo as libro, l.isbn,
+    u.nombre as usuario, u.email as email_usuario,
+    u_bibliotecario.nombre as bibliotecario,
+    p.fecha_prestamo, p.fecha_devolucion_esperada,
+    DATEDIFF(CURDATE(), p.fecha_devolucion_esperada) as dias_vencido,
+    p.renovaciones_realizadas, p.max_renovaciones
+FROM prestamo p
+         INNER JOIN libro l ON p.id_libro = l.id_libro
+         INNER JOIN usuario u ON p.id_usuario = u.id_usuario
+         INNER JOIN usuario u_bibliotecario ON p.id_bibliotecario = u_bibliotecario.id_usuario
+WHERE p.estado = 'ACTIVO'
+ORDER BY p.fecha_devolucion_esperada ASC;
+
+-- Vista 3: Multas pendientes
+CREATE OR REPLACE VIEW v_multas_pendientes AS
+SELECT
+    m.id_multa, u.dni, u.nombre as usuario, u.email, u.telefono,
+    l.titulo as libro, p.fecha_devolucion_esperada,
+    m.monto, m.dias_retraso, m.fecha_generacion,
+    DATEDIFF(CURDATE(), m.fecha_generacion) as dias_generada
+FROM multa m
+         INNER JOIN prestamo p ON m.id_prestamo = p.id_prestamo
+         INNER JOIN usuario u ON p.id_usuario = u.id_usuario
+         INNER JOIN libro l ON p.id_libro = l.id_libro
+WHERE m.estado = 'PENDIENTE'
+ORDER BY m.fecha_generacion DESC;
+
+-- Vista 4: Estadísticas de uso por usuario
+CREATE OR REPLACE VIEW v_estadisticas_usuarios AS
+SELECT
+    u.id_usuario, u.dni, u.nombre, u.email, u.tipo_usuario,
+    u.fecha_registro, u.estado,
+    COUNT(DISTINCT p.id_prestamo) as total_prestamos,
+    COUNT(DISTINCT CASE WHEN p.estado = 'ACTIVO' THEN p.id_prestamo END) as prestamos_activos,
+    COUNT(DISTINCT r.id_reserva) as total_reservas,
+    COUNT(DISTINCT m.id_multa) as total_multas,
+    COALESCE(SUM(CASE WHEN m.estado = 'PENDIENTE' THEN m.monto END), 0) as multas_pendientes
+FROM usuario u
+         LEFT JOIN prestamo p ON u.id_usuario = p.id_usuario
+         LEFT JOIN reserva r ON u.id_usuario = r.id_usuario
+         LEFT JOIN multa m ON p.id_prestamo = m.id_prestamo
+GROUP BY u.id_usuario, u.dni, u.nombre, u.email, u.tipo_usuario, u.fecha_registro, u.estado
+ORDER BY u.tipo_usuario, u.nombre;
+
+-- Vista 5: Libros más populares (por préstamos)
+CREATE OR REPLACE VIEW v_libros_populares AS
+SELECT
+    l.id_libro, l.isbn, l.titulo, l.autor, e.nombre as editorial,
+    c.nombre as categoria,
+    COUNT(p.id_prestamo) as veces_prestado,
+    l.copias_totales, l.copias_disponibles,
+    ROUND((COUNT(p.id_prestamo) / l.copias_totales), 2) as tasa_uso
+FROM libro l
+         INNER JOIN editorial e ON l.id_editorial = e.id_editorial
+         INNER JOIN categoria c ON l.id_categoria = c.id_categoria
+         LEFT JOIN prestamo p ON l.id_libro = p.id_libro
+GROUP BY l.id_libro, l.isbn, l.titulo, l.autor, e.nombre, c.nombre, l.copias_totales, l.copias_disponibles
+ORDER BY veces_prestado DESC
+LIMIT 20;
+
+-- =====================================================
+-- PROCEDIMIENTOS ALMACENADOS ÚTILES
+-- =====================================================
+
+-- Procedimiento 1: Registrar nuevo préstamo
+DROP PROCEDURE IF EXISTS sp_registrar_prestamo$$
+CREATE PROCEDURE sp_registrar_prestamo(
+    IN p_id_libro INT,
+    IN p_id_usuario INT,
+    IN p_id_bibliotecario INT,
+    IN p_dias_prestamo INT,
+    OUT p_resultado VARCHAR(200)
+)
+BEGIN
+    DECLARE v_copias_disponibles INT;
+    DECLARE v_limite_prestamos INT;
+    DECLARE v_prestamos_activos INT;
+    DECLARE v_estado_usuario VARCHAR(20);
+
+    -- Verificar estado del usuario
+    SELECT estado, limite_prestamos INTO v_estado_usuario, v_limite_prestamos
+    FROM usuario WHERE id_usuario = p_id_usuario;
+
+    IF v_estado_usuario != 'ACTIVO' THEN
+        SET p_resultado = CONCAT('Error: Usuario no activo. Estado: ', v_estado_usuario);
+    ELSE
+        -- Verificar límite de préstamos
+        SELECT COUNT(*) INTO v_prestamos_activos
+        FROM prestamo
+        WHERE id_usuario = p_id_usuario AND estado = 'ACTIVO';
+
+        IF v_prestamos_activos >= v_limite_prestamos THEN
+            SET p_resultado = CONCAT('Error: Usuario alcanzó el límite de préstamos (', v_limite_prestamos, ')');
+        ELSE
+            -- Verificar disponibilidad del libro
+            SELECT copias_disponibles INTO v_copias_disponibles
+            FROM libro WHERE id_libro = p_id_libro;
+
+            IF v_copias_disponibles <= 0 THEN
+                SET p_resultado = 'Error: No hay copias disponibles del libro';
+            ELSE
+                -- Registrar préstamo
+                INSERT INTO prestamo (id_libro, id_usuario, id_bibliotecario,
+                                      fecha_prestamo, fecha_devolucion_esperada, estado)
+                VALUES (p_id_libro, p_id_usuario, p_id_bibliotecario,
+                        CURDATE(), DATE_ADD(CURDATE(), INTERVAL p_dias_prestamo DAY), 'ACTIVO');
+
+                SET p_resultado = CONCAT('OK: Préstamo registrado. ID: ', LAST_INSERT_ID());
+            END IF;
+        END IF;
+    END IF;
+END$$
+
+-- Procedimiento 2: Registrar devolución
+DROP PROCEDURE IF EXISTS sp_registrar_devolucion$$
+CREATE PROCEDURE sp_registrar_devolucion(
+    IN p_id_prestamo INT,
+    IN p_observaciones TEXT,
+    OUT p_resultado VARCHAR(200),
+    OUT p_dias_retraso INT,
+    OUT p_multa_generada DECIMAL(10,2)
+)
+BEGIN
+    DECLARE v_fecha_devolucion_esperada DATE;
+    DECLARE v_estado VARCHAR(20);
+    DECLARE v_multa_por_dia DECIMAL(10,2);
+
+    -- Obtener datos del préstamo
+    SELECT fecha_devolucion_esperada, estado
+    INTO v_fecha_devolucion_esperada, v_estado
+    FROM prestamo WHERE id_prestamo = p_id_prestamo;
+
+    IF v_estado != 'ACTIVO' THEN
+        SET p_resultado = CONCAT('Error: Préstamo no está activo. Estado: ', v_estado);
+        SET p_dias_retraso = 0;
+        SET p_multa_generada = 0;
+    ELSE
+        -- Calcular días de retraso
+        SET p_dias_retraso = DATEDIFF(CURDATE(), v_fecha_devolucion_esperada);
+        IF p_dias_retraso < 0 THEN
+            SET p_dias_retraso = 0;
+        END IF;
+
+        -- Actualizar préstamo
+        UPDATE prestamo
+        SET estado = 'DEVUELTO',
+            fecha_devolucion_real = CURDATE(),
+            observaciones = CONCAT(IFNULL(observaciones, ''), ' ', p_observaciones)
+        WHERE id_prestamo = p_id_prestamo;
+
+        -- Generar multa si hay retraso
+        IF p_dias_retraso > 0 THEN
+            SELECT CAST(valor AS DECIMAL(10,2)) INTO v_multa_por_dia
+            FROM configuracion WHERE clave = 'multa_por_dia';
+
+            SET p_multa_generada = v_multa_por_dia * p_dias_retraso;
+
+            INSERT INTO multa (id_prestamo, monto, monto_por_dia,
+                               dias_retraso, fecha_generacion, estado)
+            VALUES (p_id_prestamo, p_multa_generada, v_multa_por_dia,
+                    p_dias_retraso, CURDATE(), 'PENDIENTE');
+
+            SET p_resultado = CONCAT('OK: Devolución registrada con multa de $',
+                                     p_multa_generada, ' (', p_dias_retraso, ' días)');
+        ELSE
+            SET p_multa_generada = 0;
+            SET p_resultado = 'OK: Devolución registrada a tiempo';
+        END IF;
+    END IF;
+END$$
+
+-- Procedimiento 3: Reservar libro
+DROP PROCEDURE IF EXISTS sp_reservar_libro$$
+CREATE PROCEDURE sp_reservar_libro(
+    IN p_id_libro INT,
+    IN p_id_usuario INT,
+    IN p_dias_vigencia INT,
+    OUT p_resultado VARCHAR(200),
+    OUT p_id_reserva INT
+)
+BEGIN
+    DECLARE v_copias_disponibles INT;
+    DECLARE v_reservas_activas INT;
+
+    -- Verificar disponibilidad
+    SELECT copias_disponibles INTO v_copias_disponibles
+    FROM libro WHERE id_libro = p_id_libro;
+
+    IF v_copias_disponibles > 0 THEN
+        SET p_resultado = 'Error: El libro está disponible para préstamo inmediato';
+        SET p_id_reserva = NULL;
+    ELSE
+        -- Verificar si ya tiene reserva activa para este libro
+        SELECT COUNT(*) INTO v_reservas_activas
+        FROM reserva
+        WHERE id_libro = p_id_libro
+          AND id_usuario = p_id_usuario
+          AND estado IN ('PENDIENTE', 'DISPONIBLE');
+
+        IF v_reservas_activas > 0 THEN
+            SET p_resultado = 'Error: Ya tienes una reserva activa para este libro';
+            SET p_id_reserva = NULL;
+        ELSE
+            -- Crear reserva
+            INSERT INTO reserva (id_libro, id_usuario, fecha_reserva,
+                                 fecha_vencimiento, estado, prioridad)
+            VALUES (p_id_libro, p_id_usuario, NOW(),
+                    DATE_ADD(CURDATE(), INTERVAL p_dias_vigencia DAY),
+                    'PENDIENTE', 0);
+
+            SET p_id_reserva = LAST_INSERT_ID();
+            SET p_resultado = CONCAT('OK: Reserva creada. ID: ', p_id_reserva);
+        END IF;
+    END IF;
+END$$
+
+DELIMITER ;
+
+-- =====================================================
+-- DATOS DE EJEMPLO: PRÉSTAMOS ACTIVOS
+-- =====================================================
+INSERT INTO prestamo (id_libro, id_usuario, id_bibliotecario,
+                      fecha_prestamo, fecha_devolucion_esperada, estado, observaciones) VALUES
+                                                                                            (1, 4, 2, DATE_SUB(CURDATE(), INTERVAL 5 DAY), DATE_ADD(CURDATE(), INTERVAL 9 DAY), 'ACTIVO', 'Préstamo regular'),
+                                                                                            (3, 5, 2, DATE_SUB(CURDATE(), INTERVAL 3 DAY), DATE_ADD(CURDATE(), INTERVAL 11 DAY), 'ACTIVO', 'Usuario frecuente'),
+                                                                                            (5, 4, 2, DATE_SUB(CURDATE(), INTERVAL 10 DAY), DATE_SUB(CURDATE(), INTERVAL 1 DAY), 'ACTIVO', 'Próximo a vencer'),
+                                                                                            (7, 6, 2, DATE_SUB(CURDATE(), INTERVAL 15 DAY), DATE_SUB(CURDATE(), INTERVAL 6 DAY), 'ACTIVO', 'VENCIDO - Usuario notificado');
+
+-- =====================================================
+-- DATOS DE EJEMPLO: MULTA PENDIENTE
+-- =====================================================
+INSERT INTO multa (id_prestamo, monto, monto_por_dia, dias_retraso,
+                   fecha_generacion, estado, observaciones) VALUES
+    (4, 60.00, 10.00, 6, DATE_SUB(CURDATE(), INTERVAL 3 DAY),
+     'PENDIENTE', 'Multa por retraso en devolución');
+
+-- =====================================================
+-- DATOS DE EJEMPLO: RESERVA
+-- =====================================================
+INSERT INTO reserva (id_libro, id_usuario, fecha_reserva, fecha_vencimiento,
+                     estado, prioridad, observaciones) VALUES
+    (2, 7, DATE_SUB(NOW(), INTERVAL 1 DAY), DATE_ADD(CURDATE(), INTERVAL 2 DAY),
+     'PENDIENTE', 1, 'Esperando disponibilidad');
+
+-- =====================================================
+-- VERIFICACIÓN FINAL DE LA INSTALACIÓN
+-- =====================================================
+
+
+SELECT CONCAT('Categorías: ', (SELECT COUNT(*) FROM categoria)) AS '';
+SELECT CONCAT('Editoriales: ', (SELECT COUNT(*) FROM editorial)) AS '';
+SELECT CONCAT('Autores: ', (SELECT COUNT(*) FROM autor)) AS '';
+SELECT CONCAT('Libros: ', (SELECT COUNT(*) FROM libro)) AS '';
+SELECT CONCAT('Usuarios: ', (SELECT COUNT(*) FROM usuario)) AS '';
+SELECT CONCAT('Relaciones libro-autor: ', (SELECT COUNT(*) FROM libro_autor)) AS '';
+SELECT CONCAT('Préstamos activos: ', (SELECT COUNT(*) FROM prestamo WHERE estado = 'ACTIVO')) AS '';
+SELECT CONCAT('Triggers creados: ', (SELECT COUNT(*) FROM information_schema.triggers
+                                     WHERE trigger_schema = 'biblioteca_digital')) AS '';
+SELECT CONCAT('Vistas creadas: ', (SELECT COUNT(*) FROM information_schema.views
+                                   WHERE table_schema = 'biblioteca_digital')) AS '';
+SELECT CONCAT('Procedimientos almacenados: ', (SELECT COUNT(*) FROM information_schema.routines
+                                               WHERE routine_schema = 'biblioteca_digital'
+                                                 AND routine_type = 'PROCEDURE')) AS '';
+SELECT '' AS '';
+
+SELECT 'USUARIOS DEL SISTEMA:' AS '';
+SELECT '========================================' AS '';
+SELECT tipo_usuario, COUNT(*) as cantidad,
+       GROUP_CONCAT(email ORDER BY id_usuario SEPARATOR ', ') as emails
+FROM usuario
+GROUP BY tipo_usuario;
+SELECT '' AS '';
+
+SELECT 'LIBROS DISPONIBLES (primeros 5):' AS '';
+SELECT '========================================' AS '';
+SELECT titulo, autor, copias_disponibles, ubicacion
+FROM v_libros_disponibles
+LIMIT 5;
+SELECT '' AS '';
+
+SELECT 'CONFIGURACIÓN DEL SISTEMA:' AS '';
+SELECT '========================================' AS '';
+SELECT clave, valor, descripcion FROM configuracion ORDER BY id_config;
+SELECT '' AS '';
+
+SELECT '========================================' AS '';
+SELECT 'INFORMACIÓN DE ACCESO:' AS '';
+SELECT '========================================' AS '';
+SELECT 'Administrador: admin@biblioteca.com' AS '';
+SELECT 'Contraseña: admin123' AS '';
+SELECT 'Bibliotecario: juan.perez@biblioteca.com' AS '';
+SELECT 'Contraseña: biblio123' AS '';
+SELECT 'Lector de prueba: carlos.lopez@email.com' AS '';
+SELECT 'Contraseña: lector123' AS '';
+SELECT '========================================' AS '';
+SELECT '' AS '';
+
+SELECT 'PRUEBAS RECOMENDADAS:' AS '';
+SELECT '========================================' AS '';
+SELECT '1. Consultar vista v_libros_disponibles' AS '';
+SELECT '2. Probar procedimiento sp_registrar_prestamo' AS '';
+SELECT '3. Verificar triggers con datos inválidos' AS '';
+SELECT '4. Revisar estadísticas en v_estadisticas_usuarios' AS '';
+SELECT '========================================' AS '';
+
+-- Mensaje final
+SELECT '' AS '';
+SELECT '¡Base de datos lista para usar!' AS '';
+SELECT 'Guarda este script para futuras referencias.' AS '';
+
+-- Mejor estructura para tabla auditoria
+DROP TABLE IF EXISTS auditoria;
+CREATE  TABLE auditoria (
+                           id_auditoria INT NOT NULL AUTO_INCREMENT,
+                           id_usuario INT NOT NULL COMMENT 'Usuario que realizó la acción',
+                           tipo_accion ENUM('INSERT', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'CONSULTA', 'SISTEMA') NOT NULL,
+                           tabla_afectada VARCHAR(50) COMMENT 'Tabla afectada (si aplica)',
+                           id_registro_afectado INT COMMENT 'ID del registro afectado',
+
+    -- Campos específicos para diferentes tipos de auditoría
+                           modulo VARCHAR(50) COMMENT 'Módulo del sistema (ej: PRÉSTAMOS, USUARIOS)',
+                           accion_especifica VARCHAR(100) NOT NULL COMMENT 'Descripción específica de la acción',
+
+    -- Datos antes y después (para updates)
+                           datos_anteriores JSON COMMENT 'Datos antes del cambio (solo UPDATE)',
+                           datos_nuevos JSON COMMENT 'Datos después del cambio',
+
+    -- Información de sesión
+                           ip_address VARCHAR(45),
+                           user_agent VARCHAR(255),
+                           session_id VARCHAR(100),
+
+    -- Metadatos
+                           fecha_hora DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                           exito BOOLEAN NOT NULL DEFAULT TRUE COMMENT 'Si la acción fue exitosa',
+                           mensaje_error TEXT COMMENT 'Mensaje de error si falló',
+                           tiempo_ejecucion_ms INT COMMENT 'Tiempo que tomó la acción',
+
+                           PRIMARY KEY (id_auditoria),
+
+    -- Índices para búsquedas rápidas
+                           INDEX idx_usuario_fecha (id_usuario, fecha_hora),
+                           INDEX idx_tabla_registro (tabla_afectada, id_registro_afectado),
+                           INDEX idx_tipo_accion (tipo_accion),
+                           INDEX idx_modulo (modulo),
+                           INDEX idx_fecha (fecha_hora),
+                           INDEX idx_exito (exito),
+
+                           FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario)
+                               ON DELETE RESTRICT
+                               ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    COMMENT='Registro de auditoría de todas las acciones del sistema';
+
+
+
+DELIMITER $$
+
+-- Trigger 1: Auditoría para tabla USUARIO
+DROP TRIGGER IF EXISTS tr_auditoria_usuario_insert$$
+CREATE TRIGGER tr_auditoria_usuario_insert
+    AFTER INSERT ON usuario
+    FOR EACH ROW
+BEGIN
+    INSERT INTO auditoria (
+        id_usuario, tipo_accion, tabla_afectada, id_registro_afectado,
+        modulo, accion_especifica, datos_nuevos, ip_address
+    )
+    VALUES (
+               NEW.id_usuario, 'INSERT', 'usuario', NEW.id_usuario,
+               'USUARIOS', 'Creación de nuevo usuario',
+               JSON_OBJECT(
+                       'dni', NEW.dni,
+                       'nombre', NEW.nombre,
+                       'email', NEW.email,
+                       'tipo_usuario', NEW.tipo_usuario,
+                       'estado', NEW.estado
+               ),
+               @user_ip
+           );
+END$$
+
+DROP TRIGGER IF EXISTS tr_auditoria_usuario_update$$
+CREATE TRIGGER tr_auditoria_usuario_update
+    AFTER UPDATE ON usuario
+    FOR EACH ROW
+BEGIN
+    -- Solo auditar si cambió algo importante
+    IF OLD.estado != NEW.estado OR OLD.tipo_usuario != NEW.tipo_usuario THEN
+        INSERT INTO auditoria (
+            id_usuario, tipo_accion, tabla_afectada, id_registro_afectado,
+            modulo, accion_especifica, datos_anteriores, datos_nuevos
+        )
+        VALUES (
+                   NEW.id_usuario, 'UPDATE', 'usuario', NEW.id_usuario,
+                   'USUARIOS', 'Actualización de usuario',
+                   JSON_OBJECT(
+                           'estado_anterior', OLD.estado,
+                           'tipo_usuario_anterior', OLD.tipo_usuario
+                   ),
+                   JSON_OBJECT(
+                           'estado_nuevo', NEW.estado,
+                           'tipo_usuario_nuevo', NEW.tipo_usuario
+                   )
+               );
+    END IF;
+END$$
+
+-- Trigger 2: Auditoría para tabla LIBRO
+DROP TRIGGER IF EXISTS tr_auditoria_libro_insert$$
+CREATE TRIGGER tr_auditoria_libro_insert
+    AFTER INSERT ON libro
+    FOR EACH ROW
+BEGIN
+    INSERT INTO auditoria (
+        id_usuario, tipo_accion, tabla_afectada, id_registro_afectado,
+        modulo, accion_especifica, datos_nuevos
+    )
+    VALUES (
+               @current_user_id, 'INSERT', 'libro', NEW.id_libro,
+               'CATÁLOGO', 'Nuevo libro agregado al catálogo',
+               JSON_OBJECT(
+                       'isbn', NEW.isbn,
+                       'titulo', NEW.titulo,
+                       'copias_totales', NEW.copias_totales,
+                       'precio', NEW.precio
+               )
+           );
+END$$
+
+DROP TRIGGER IF EXISTS tr_auditoria_libro_update$$
+CREATE TRIGGER tr_auditoria_libro_update
+    AFTER UPDATE ON libro
+    FOR EACH ROW
+BEGIN
+    -- Auditar cambios en disponibilidad
+    IF OLD.copias_disponibles != NEW.copias_disponibles THEN
+        INSERT INTO auditoria (
+            id_usuario, tipo_accion, tabla_afectada, id_registro_afectado,
+            modulo, accion_especifica, datos_anteriores, datos_nuevos
+        )
+        VALUES (
+                   @current_user_id, 'UPDATE', 'libro', NEW.id_libro,
+                   'CATÁLOGO', 'Cambio en disponibilidad de libro',
+                   JSON_OBJECT('copias_disponibles', OLD.copias_disponibles),
+                   JSON_OBJECT('copias_disponibles', NEW.copias_disponibles)
+               );
+    END IF;
+END$$
+
+-- Trigger 3: Auditoría para PRÉSTAMOS (CRÍTICO)
+DROP TRIGGER IF EXISTS tr_auditoria_prestamo_insert$$
+CREATE TRIGGER tr_auditoria_prestamo_insert
+    AFTER INSERT ON prestamo
+    FOR EACH ROW
+BEGIN
+    INSERT INTO auditoria (
+        id_usuario, tipo_accion, tabla_afectada, id_registro_afectado,
+        modulo, accion_especifica, datos_nuevos
+    )
+    VALUES (
+               NEW.id_bibliotecario, 'INSERT', 'prestamo', NEW.id_prestamo,
+               'PRÉSTAMOS', 'Nuevo préstamo registrado',
+               JSON_OBJECT(
+                       'id_libro', NEW.id_libro,
+                       'id_usuario', NEW.id_usuario,
+                       'fecha_prestamo', NEW.fecha_prestamo,
+                       'fecha_devolucion_esperada', NEW.fecha_devolucion_esperada
+               )
+           );
+END$$
+
+DROP TRIGGER IF EXISTS tr_auditoria_prestamo_update$$
+CREATE TRIGGER tr_auditoria_prestamo_update
+    AFTER UPDATE ON prestamo
+    FOR EACH ROW
+BEGIN
+    -- Auditar devolución
+    IF NEW.estado = 'DEVUELTO' AND OLD.estado != 'DEVUELTO' THEN
+        INSERT INTO auditoria (
+            id_usuario, tipo_accion, tabla_afectada, id_registro_afectado,
+            modulo, accion_especifica, datos_nuevos
+        )
+        VALUES (
+                   NEW.id_bibliotecario, 'UPDATE', 'prestamo', NEW.id_prestamo,
+                   'PRÉSTAMOS', 'Devolución de préstamo',
+                   JSON_OBJECT(
+                           'fecha_devolucion_real', NEW.fecha_devolucion_real,
+                           'estado', NEW.estado
+                   )
+               );
+    END IF;
+
+    -- Auditar renovación
+    IF NEW.renovaciones_realizadas > OLD.renovaciones_realizadas THEN
+        INSERT INTO auditoria (
+            id_usuario, tipo_accion, tabla_afectada, id_registro_afectado,
+            modulo, accion_especifica, datos_nuevos
+        )
+        VALUES (
+                   NEW.id_bibliotecario, 'UPDATE', 'prestamo', NEW.id_prestamo,
+                   'PRÉSTAMOS', 'Renovación de préstamo',
+                   JSON_OBJECT(
+                           'renovaciones', NEW.renovaciones_realizadas,
+                           'nueva_fecha_devolucion', NEW.fecha_devolucion_esperada
+                   )
+               );
+    END IF;
+END$$
+
+-- Trigger 4: Auditoría para MULTAS
+DROP TRIGGER IF EXISTS tr_auditoria_multa_update$$
+CREATE TRIGGER tr_auditoria_multa_update
+    AFTER UPDATE ON multa
+    FOR EACH ROW
+BEGIN
+    -- Auditar pago de multa
+    IF NEW.estado = 'PAGADA' AND OLD.estado != 'PAGADA' THEN
+        INSERT INTO auditoria (
+            id_usuario, tipo_accion, tabla_afectada, id_registro_afectado,
+            modulo, accion_especifica, datos_nuevos
+        )
+        VALUES (
+                   NEW.id_usuario_recibe_pago, 'UPDATE', 'multa', NEW.id_multa,
+                   'FINANZAS', 'Pago de multa registrado',
+                   JSON_OBJECT(
+                           'monto', NEW.monto,
+                           'metodo_pago', NEW.metodo_pago,
+                           'fecha_pago', NEW.fecha_pago
+                   )
+               );
+    END IF;
+END$$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+-- Procedimiento para registrar login
+DROP PROCEDURE IF EXISTS sp_auditar_login$$
+CREATE PROCEDURE sp_auditar_login(
+    IN p_id_usuario INT,
+    IN p_ip_address VARCHAR(45),
+    IN p_user_agent VARCHAR(255),
+    IN p_session_id VARCHAR(100),
+    IN p_exito BOOLEAN,
+    IN p_mensaje_error TEXT
+)
+BEGIN
+    INSERT INTO auditoria (
+        id_usuario, tipo_accion, modulo, accion_especifica,
+        ip_address, user_agent, session_id, exito, mensaje_error
+    )
+    VALUES (
+               p_id_usuario, 'LOGIN', 'AUTENTICACIÓN', 'Inicio de sesión',
+               p_ip_address, p_user_agent, p_session_id, p_exito, p_mensaje_error
+           );
+END$$
+
+-- Procedimiento para auditoría manual desde aplicación
+DROP PROCEDURE IF EXISTS sp_auditar_accion$$
+CREATE PROCEDURE sp_auditar_accion(
+    IN p_id_usuario INT,
+    IN p_tipo_accion VARCHAR(20),
+    IN p_modulo VARCHAR(50),
+    IN p_accion_especifica VARCHAR(100),
+    IN p_tabla_afectada VARCHAR(50),
+    IN p_id_registro_afectado INT,
+    IN p_datos_anteriores JSON,
+    IN p_datos_nuevos JSON,
+    IN p_ip_address VARCHAR(45),
+    IN p_exito BOOLEAN,
+    IN p_mensaje_error TEXT
+)
+BEGIN
+    INSERT INTO auditoria (
+        id_usuario, tipo_accion, modulo, accion_especifica,
+        tabla_afectada, id_registro_afectado,
+        datos_anteriores, datos_nuevos,
+        ip_address, exito, mensaje_error,
+        fecha_hora
+    )
+    VALUES (
+               p_id_usuario, p_tipo_accion, p_modulo, p_accion_especifica,
+               p_tabla_afectada, p_id_registro_afectado,
+               p_datos_anteriores, p_datos_nuevos,
+               p_ip_address, p_exito, p_mensaje_error,
+               NOW()
+           );
+END$$
+
+DELIMITER ;
+
+
+-- Vista para panel de administración
+CREATE OR REPLACE VIEW v_auditoria_resumen AS
+SELECT
+    DATE(a.fecha_hora) as fecha,
+    a.modulo,
+    a.tipo_accion,
+    COUNT(*) as total_acciones,
+    COUNT(DISTINCT a.id_usuario) as usuarios_unicos,
+    AVG(CASE WHEN a.exito = 1 THEN 1 ELSE 0 END) * 100 as porcentaje_exito
+FROM auditoria a
+GROUP BY DATE(a.fecha_hora), a.modulo, a.tipo_accion
+ORDER BY fecha DESC, total_acciones DESC;
+
+-- Vista para actividad sospechosa
+CREATE OR REPLACE VIEW v_actividad_sospechosa AS
+SELECT
+    a.ip_address,
+    u.nombre as usuario,
+    COUNT(*) as acciones_5min,
+    GROUP_CONCAT(DISTINCT a.modulo SEPARATOR ', ') as modulos_afectados,
+    MIN(a.fecha_hora) as primera_accion,
+    MAX(a.fecha_hora) as ultima_accion
+FROM auditoria a
+         LEFT JOIN usuario u ON a.id_usuario = u.id_usuario
+WHERE a.fecha_hora >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+GROUP BY a.ip_address, u.id_usuario, u.nombre
+HAVING COUNT(*) > 20  -- Más de 20 acciones en 5 minutos
+ORDER BY acciones_5min DESC;
+
+USE biblioteca_digital;
+
+-- Permitir que el campo legacy 'autor' sea nulo
+ALTER TABLE libro MODIFY COLUMN autor VARCHAR(150) NULL;
+
+-- Permitir que el campo legacy 'editorial' sea nulo
+ALTER TABLE libro MODIFY COLUMN editorial VARCHAR(100) NULL;
+
+
+select *from auditoria;
